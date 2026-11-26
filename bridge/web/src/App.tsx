@@ -5,7 +5,6 @@ import Layout from '@/components/Layout/Layout';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Usage from '@/pages/Usage';
-import ProjectList from '@/pages/Projects/ProjectList';
 import ProjectDetail from '@/pages/Projects/ProjectDetail';
 import SessionList from '@/pages/Sessions/SessionList';
 import SessionChat from '@/pages/Sessions/SessionChat';
@@ -72,6 +71,7 @@ export default function App() {
         <Route path="usage" element={<Usage />} />
         <Route path="setup" element={<SetupRoute />} />
         <Route path="roles" element={<RoleList />} />
+        <Route path="roles/:name" element={<ProjectDetail />} />
         <Route path="devices" element={<DeviceList />} />
         <Route path="wiki-galaxy" element={<WikiGalaxyPage />} />
         <Route path="apps" element={<AppList />} />
@@ -83,8 +83,6 @@ export default function App() {
         <Route path="plugins/dsh" element={<PluginList />} />
         <Route path="plugins/pet" element={<Navigate to="/plugins?plugin=dsh-pet" replace />} />
         <Route path="pet" element={<Navigate to="/plugins?plugin=dsh-pet" replace />} />
-        <Route path="projects" element={<ProjectList />} />
-        <Route path="projects/:name" element={<ProjectDetail />} />
         <Route path="sessions" element={<SessionList />} />
         <Route path="sessions/:project/:id" element={<SessionChat />} />
         <Route path="providers" element={<ProviderList />} />

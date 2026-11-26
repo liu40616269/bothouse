@@ -34,7 +34,7 @@ export default function QQSetup({ clis, projects, onBack }: {
           catch (e) { setError(e instanceof Error ? e.message : String(e)); }
           finally { setRestarting(false); }
         }}>{t('setup.restartNow')}</Button>}
-        <Link to="/projects">{t('projects.title')}</Link>
+        <Link to="/roles">{t('nav.roles')}</Link>
       </div>
     </> : <>
       <p className="text-sm text-gray-500">{t('qq.setupHint')}</p>

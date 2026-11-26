@@ -622,7 +622,6 @@ export default function SetupWizard() {
               <span className="text-xs text-gray-500">{T.replyLangKeptHow}</span></p>
           )}
         </div>
-        <Link to="/projects?manual=1" className="text-xs text-gray-400 hover:text-accent whitespace-nowrap">{T.manualOther}</Link>
       </div>
 
       {/* stepper */}

@@ -252,7 +252,7 @@ export default function RoleList() {
                       <div className="flex items-center gap-2">
                         {role.source !== 'dsh' ? (
                           <Link
-                            to={`/projects/${encodeURIComponent(role.name)}`}
+                            to={`/roles/${encodeURIComponent(role.name)}`}
                             className="truncate text-[17px] font-semibold leading-6 tracking-tight text-ink transition-colors hover:text-accent-text"
                           >
                             {shown}
@@ -271,7 +271,7 @@ export default function RoleList() {
                     {role.source !== 'dsh' && (
                       <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
                         <Link
-                          to={`/projects/${encodeURIComponent(role.name)}`}
+                          to={`/roles/${encodeURIComponent(role.name)}`}
                           title="配置"
                           aria-label={`配置 ${shown}`}
                           className="grid h-9 w-9 place-items-center rounded-control text-ink-mute transition-colors duration-base hover:bg-surface-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"

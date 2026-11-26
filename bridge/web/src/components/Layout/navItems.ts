@@ -92,7 +92,6 @@ const allItems: NavItem[] = [...primaryNav, ...navGroups.flatMap((g) => g.items)
 /** Nav item of the page at `pathname` (longest matching route). */
 export function navItemFor(pathname: string): NavItem | undefined {
   if (pathname === '/') return primaryNav[0];
-  if (pathname === '/projects' || pathname.startsWith('/projects/')) return primaryNav[1];
   let best: NavItem | undefined;
   for (const item of allItems) {
     if (item.path === '/') continue;

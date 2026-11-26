@@ -252,7 +252,7 @@ export default function Dashboard() {
             {/* #610: sessions per project sit under 正在发生 so the two columns end at similar heights */}
             {projectRows.length > 0 && (
               <section>
-                {cardHead(t('dashboard.projectSessions', '各项目会话数'), '/projects')}
+                {cardHead(t('dashboard.projectSessions', '各项目会话数'), '/roles')}
                 <div className="rounded-card bg-surface p-5 shadow-ui-1">
                   <Bars data={projectRows.slice(0, 6)} labelWidth={96} />
                 </div>
