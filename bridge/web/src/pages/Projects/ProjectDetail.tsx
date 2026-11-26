@@ -680,8 +680,8 @@ export default function ProjectDetail() {
         {/* Agent settings */}
         <Card>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">{t('projects.agentSettings', 'Agent')}</h3>
-          <Input label={t('common.name', 'Name')} value={!nameTouched && project?.name_customized === false && selectedAgentType !== project.agent_type ? backendLabel(selectedAgentType) : displayName} onChange={e => { setDisplayName(e.target.value); setNameTouched(true); }} />
           <div className="space-y-4 max-w-lg">
+            <Input label={t('common.name', '名称')} value={!nameTouched && project?.name_customized === false && selectedAgentType !== project.agent_type ? backendLabel(selectedAgentType) : displayName} onChange={e => { setDisplayName(e.target.value); setNameTouched(true); }} />
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                 {t('projects.agentType', 'Agent type')}
@@ -691,7 +691,11 @@ export default function ProjectDetail() {
                 onChange={(e) => setSelectedAgentType(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent/50"
               >
-                {agentTypes.map(a => <option key={a} value={a}>{a}</option>)}
+                {agentTypes.map(a => (
+                  <option key={a} value={a}>
+                    {a === 'claudecode' ? 'claudecode (Claude Code / ducc)' : a}
+                  </option>
+                ))}
                 {selectedAgentType && !agentTypes.includes(selectedAgentType) && (
                   <option value={selectedAgentType}>{selectedAgentType}</option>
                 )}
