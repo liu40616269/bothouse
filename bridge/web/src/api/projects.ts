@@ -113,3 +113,14 @@ export const deleteProject = (name: string) =>
     restart_required: boolean;
     hot_load?: { projects_removed?: string[]; hot_load_error?: string };
   }>(`/projects/${name}`);
+
+export const getProjectAvatar = (name: string) =>
+  api.get<{ supported: boolean; platforms: string[]; avatar_url: string }>(
+    `/projects/${encodeURIComponent(name)}/avatar`,
+  );
+
+export const updateProjectAvatar = (name: string, dataURL: string) =>
+  api.post<{ avatar_url: string; updated_platforms: string[] }>(
+    `/projects/${encodeURIComponent(name)}/avatar`,
+    { data_url: dataURL },
+  );

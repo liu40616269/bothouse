@@ -1120,6 +1120,8 @@ func (m *ManagementServer) handleProjectRoutes(w http.ResponseWriter, r *http.Re
 		m.handleProjectUsers(w, r, engine)
 	case "persona":
 		m.handleProjectPersona(w, r, engine)
+	case "avatar":
+		m.handleProjectAvatar(w, r, engine)
 	default:
 		mgmtError(w, http.StatusNotFound, "not found")
 	}
