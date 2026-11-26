@@ -129,8 +129,10 @@ func (e *Engine) settleTurnResult(turn *interactiveTurn, r *interactiveResult) b
 	// still replaces the open draft. Do not infer ownership from text matches.
 	fullResponse := event.Content
 	if event.StreamedContentBytes > 0 {
-		if tail := event.Content[event.StreamedContentBytes:]; tail != "" {
-			turn.textParts = append(turn.textParts, tail)
+		if event.StreamedContentBytes < len(event.Content) {
+			if tail := event.Content[event.StreamedContentBytes:]; tail != "" {
+				turn.textParts = append(turn.textParts, tail)
+			}
 		}
 		fullResponse = ""
 	}

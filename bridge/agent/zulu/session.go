@@ -379,10 +379,17 @@ func parseZuluStreamLine(line string, streamedBytes *int) ([]core.Event, string,
 			})
 			return out, msg.CID, true
 		}
+		// When zulu streamed multiple TEXT segments across tool rounds, completed.content
+		// may only hold the final segment (shorter than total streamedBytes). Clamp
+		// StreamedContentBytes so core never slices past len(Content).
+		streamedForResult := *streamedBytes
+		if streamedForResult > len(msg.Content) {
+			streamedForResult = len(msg.Content)
+		}
 		out = append(out, core.Event{
 			Type:                 core.EventResult,
 			Content:              msg.Content,
-			StreamedContentBytes: *streamedBytes,
+			StreamedContentBytes: streamedForResult,
 			SessionID:            msg.CID,
 			Done:                 true,
 		})
