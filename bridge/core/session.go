@@ -155,11 +155,15 @@ func (s *Session) unlock(update bool) {
 func (s *Session) AddHistory(role, content string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := time.Now()
 	s.History = append(s.History, HistoryEntry{
 		Role:      role,
 		Content:   content,
-		Timestamp: time.Now(),
+		Timestamp: now,
 	})
+	if now.After(s.UpdatedAt) {
+		s.UpdatedAt = now
+	}
 }
 
 // recordPastAgentSessionID saves the current AgentSessionID to PastAgentSessionIDs

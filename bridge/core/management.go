@@ -1558,9 +1558,13 @@ func (m *ManagementServer) handleProjectSessions(w http.ResponseWriter, r *http.
 		for _, s := range stored {
 			s.mu.Lock()
 			histCount := len(s.History)
+			updatedAt := s.UpdatedAt
 			var lastMsg map[string]any
 			if histCount > 0 {
 				last := s.History[histCount-1]
+				if last.Timestamp.After(updatedAt) {
+					updatedAt = last.Timestamp
+				}
 				preview := last.Content
 				if r := []rune(preview); len(r) > 200 {
 					preview = string(r[:200])
@@ -1579,7 +1583,7 @@ func (m *ManagementServer) handleProjectSessions(w http.ResponseWriter, r *http.
 				"active":        activeIDs[s.ID],
 				"history_count": histCount,
 				"created_at":    s.CreatedAt,
-				"updated_at":    s.UpdatedAt,
+				"updated_at":    updatedAt,
 				"last_message":  lastMsg,
 			}
 			s.mu.Unlock()
