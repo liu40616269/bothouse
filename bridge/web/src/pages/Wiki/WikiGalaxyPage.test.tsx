@@ -65,8 +65,19 @@ describe('Wiki galaxy sub-page', () => {
     expect(c.textContent).toContain('dsh.readError');
   });
 
-  it('frames the collab galaxy page through the panel mount path', () => {
-    const c = renderPage();
+  it('shows friendly empty state without raw 503 iframe when standalone and DSH is stopped', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    let c!: HTMLDivElement;
+    await act(async () => { c = renderPage(); });
+    expect(c.querySelector('iframe')).toBeNull();
+    expect(c.textContent).toContain('dsh.stopped');
+    expect(c.textContent).toContain('nav.forum');
+  });
+
+  it('frames the collab galaxy page through the panel mount path', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    let c!: HTMLDivElement;
+    await act(async () => { c = renderPage(); });
     const frame = c.querySelector<HTMLIFrameElement>('[data-testid="wiki-galaxy-frame"]')!;
     expect(frame).not.toBeNull();
     // jsdom serves index.html at the root, i.e. the panel opened directly on the management
@@ -75,11 +86,13 @@ describe('Wiki galaxy sub-page', () => {
     expect(new URL(frame.src).pathname).toBe('/dsh/collab/wiki-galaxy');
   });
 
-  it('remounts the frame on refresh so the galaxy is fetched again', () => {
-    const c = renderPage();
+  it('remounts the frame on refresh so the galaxy is fetched again', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    let c!: HTMLDivElement;
+    await act(async () => { c = renderPage(); });
     const before = c.querySelector('[data-testid="wiki-galaxy-frame"]');
     const refresh = [...c.querySelectorAll('button')].find((b) => b.textContent?.includes('common.refresh'))!;
-    act(() => refresh.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => { refresh.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     const after = c.querySelector('[data-testid="wiki-galaxy-frame"]');
     expect(after).not.toBe(before);
   });
