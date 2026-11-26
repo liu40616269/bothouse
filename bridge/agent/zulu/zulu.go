@@ -386,6 +386,40 @@ func (a *Agent) Stop() error {
 	return nil
 }
 
+// SkillDirs implements core.SkillProvider so the Skills page and /skills command
+// discover Comate/Zulu skills (~/.comate/skills, ~/.comate/skills/.system) as well
+// as shared ~/.claude/skills and workspace-local skill directories.
+func (a *Agent) SkillDirs() []string {
+	a.mu.Lock()
+	workDir := strings.TrimSpace(a.workDir)
+	remoteHost := strings.TrimSpace(a.remoteHost)
+	a.mu.Unlock()
+
+	var dirs []string
+	seen := map[string]bool{}
+	add := func(d string) {
+		if d == "" || seen[d] {
+			return
+		}
+		seen[d] = true
+		dirs = append(dirs, d)
+	}
+
+	if remoteHost == "" && workDir != "" {
+		if absDir, err := filepath.Abs(workDir); err == nil {
+			workDir = absDir
+		}
+		add(filepath.Join(workDir, ".comate", "skills"))
+		add(filepath.Join(workDir, ".claude", "skills"))
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		add(filepath.Join(home, ".comate", "skills"))
+		add(filepath.Join(home, ".comate", "skills", ".system"))
+		add(filepath.Join(home, ".claude", "skills"))
+	}
+	return dirs
+}
+
 func attachDirForWorkDir(workDir string) string {
 	return filepath.Join(workDir, ".cc-connect", "attachments")
 }
