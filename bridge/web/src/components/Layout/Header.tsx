@@ -51,8 +51,9 @@ function useDismiss(open: boolean, close: () => void) {
 export default function Header() {
   const { t, i18n } = useTranslation();
   const { theme, resolved, setTheme } = useThemeStore();
-  const { pathname } = useLocation();
-  const isSetup = pathname === '/setup';
+  const { pathname, search } = useLocation();
+  const searchParams = new URLSearchParams(search);
+  const isSetup = pathname === '/setup' && !searchParams.has('add') && !searchParams.has('add_platform');
   const current = navItemFor(pathname);
   const pageKey = navKeyFor(pathname);
   const T = wizardTexts(i18n.language);

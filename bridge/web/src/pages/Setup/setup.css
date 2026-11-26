@@ -74,8 +74,10 @@
    的灰——gray-500 (#6B7280) 在深色卡片 #16171A 上 3.7:1、在未到的步骤条 #19191B 上 3.6:1，12px 的字
    看不清。这里把向导范围内的这两档接到 index.css:59-71 的墨色阶梯（深色下 --ui-ink-soft / --ui-ink-mute
    都在 6:1 以上）；浅色和黄白两套本来就有 4.5:1 以上，不受这条影响。 */
-.dark .setup-layout .text-gray-500 { color: rgb(var(--ui-ink-soft)); }
-.dark .setup-layout .text-gray-400 { color: rgb(var(--ui-ink-mute)); }
+.dark .setup-layout .text-gray-500,
+.dark .setup-wizard .text-gray-500 { color: rgb(var(--ui-ink-soft)); }
+.dark .setup-layout .text-gray-400,
+.dark .setup-wizard .text-gray-400 { color: rgb(var(--ui-ink-mute)); }
 @media (max-width: 640px) {
   .setup-layout main { padding: 20px 16px 12px; }
   .setup-card { padding: 20px; }

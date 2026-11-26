@@ -8,7 +8,11 @@ import { cn } from '@/lib/utils';
 // get a bottom tab bar instead. No sidebar, so the panel framed in DSH sits next to DSH's own
 // sidebar without a second one.
 export default function Layout() {
-  const isSetup = useLocation().pathname === '/setup';
+  const { pathname, search } = useLocation();
+  const params = new URLSearchParams(search);
+  // Only first-time setup (/setup) uses the standalone wizard shell; adding a role or
+  // platform from an existing dashboard keeps the panel theme and full navigation bar.
+  const isSetup = pathname === '/setup' && !params.has('add') && !params.has('add_platform');
 
   return (
     <div className={cn('ui-safe-x relative flex h-screen flex-col overflow-hidden bg-canvas text-ink', isSetup && 'setup-layout')}>
