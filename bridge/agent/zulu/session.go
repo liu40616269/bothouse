@@ -25,6 +25,7 @@ type zuluSession struct {
 	license      string
 	ptoken       string
 	model        string
+	modelFn      func() string
 	mode         string
 	workMode     string
 	thinking     string
@@ -105,8 +106,8 @@ func (s *zuluSession) buildArgs(prompt string, imgPaths, filePaths []string) []s
 	if cid := s.CurrentSessionID(); cid != "" {
 		args = append(args, "-c", cid)
 	}
-	if s.model != "" {
-		args = append(args, "-m", s.model)
+	if m := s.currentModel(); m != "" {
+		args = append(args, "-m", m)
 	}
 	if s.workMode != "" {
 		args = append(args, "--mode", s.workMode)
@@ -415,6 +416,19 @@ func (s *zuluSession) RespondPermission(_ string, _ core.PermissionResult) error
 
 func (s *zuluSession) Events() <-chan core.Event {
 	return s.events
+}
+
+func (s *zuluSession) currentModel() string {
+	if s.modelFn != nil {
+		if m := strings.TrimSpace(s.modelFn()); m != "" {
+			return m
+		}
+	}
+	return s.model
+}
+
+func (s *zuluSession) CurrentModel() string {
+	return s.currentModel()
 }
 
 func (s *zuluSession) CurrentSessionID() string {

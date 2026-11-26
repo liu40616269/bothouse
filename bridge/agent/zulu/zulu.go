@@ -373,6 +373,7 @@ func (a *Agent) StartSession(_ context.Context, sessionID string) (core.AgentSes
 		sessionID,
 		extraEnv,
 	)
+	sess.modelFn = a.GetModel
 	a.mu.Unlock()
 	return sess, nil
 }
