@@ -2663,8 +2663,10 @@ func (m *ManagementServer) handleSkills(w http.ResponseWriter, r *http.Request) 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	orderedNames := m.orderedEngineNamesLocked()
 	var result []projectSkills
-	for name, e := range m.engines {
+	for _, name := range orderedNames {
+		e := m.engines[name]
 		skills := e.ListSkills()
 		items := make([]skillInfo, 0, len(skills))
 		for _, s := range skills {

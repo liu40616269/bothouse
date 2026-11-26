@@ -52,10 +52,10 @@ export default function SkillList() {
       setProjects(ps);
       setManaged(data.managed_skills || []);
       setPending(data.pending_skills || []);
-      if (ps.length > 0 && !activeProject) setActiveProject(ps[0].project);
+      if (ps.length > 0) setActiveProject(prev => prev || ps[0].project);
     } catch { /* empty */ }
     setLoading(false);
-  }, [activeProject, summaries, members]);
+  }, [summaries, members]);
 
   const loadPresets = useCallback(async () => {
     setPresetsLoading(true);
@@ -86,15 +86,10 @@ export default function SkillList() {
       <div className="min-w-0">
         <h1 className="text-xl font-semibold text-ink">{t('skills.title')}</h1>
         <p className="mt-1 text-sm text-ink-soft">{t('skills.subtitle')}</p>
-        {tab === 'local' && projects.length > 0 && (
-          <p className="mt-2 text-xs text-ink-mute tabular-nums">
-            {projects.length} 个项目 · {skillTotal} 个技能
-          </p>
-        )}
       </div>
 
       {/* 分段控件用明度台阶表示选中，不用阴影：阴影房规只留给真正浮起来的浮层。 */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label={t('skills.title')} className="flex w-fit gap-1 rounded-card bg-surface-sunken p-1">
           {(['local', 'recommended'] as const).map(key => (
             <button
@@ -113,6 +108,11 @@ export default function SkillList() {
             </button>
           ))}
         </div>
+        {tab === 'local' && projects.length > 0 && (
+          <span className="text-xs text-ink-mute tabular-nums">
+            {projects.length} 个项目 · {skillTotal} 个技能
+          </span>
+        )}
         {tab === 'recommended' && (
           <Button variant="ghost" size="sm" onClick={loadPresets}>
             <RefreshCw size={14} className="mr-1.5" />
