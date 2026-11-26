@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { RefreshCw, LogOut, Languages, LayoutGrid, ChevronDown, Plus } from 'lucide-react';
+import { RefreshCw, LogOut, Languages, LayoutGrid, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useThemeStore, NEXT_THEME, NEXT_WIZARD_THEME } from '@/store/theme';
 import { THEME_ICONS } from '@/components/Theme/themeIcons';
@@ -87,13 +87,9 @@ export default function Header() {
     setLangOpen(false);
   };
 
-  // On a launcher page (or add-role wizard) the launcher button names that page, so the bar still says where you are.
+  // Highlight the launcher button when on a secondary page (or add-role wizard), while keeping its label fixed.
   const isAddRole = pathname === '/setup' && !isSetup;
   const onSecondary = !isSetup && ((Boolean(current) && !isPrimary(current!)) || isAddRole);
-  const SecondaryIcon = isAddRole ? Plus : (current && !isPrimary(current) ? current.icon : LayoutGrid);
-  const secondaryLabel = isAddRole
-    ? t('nav.addRole')
-    : (current && !isPrimary(current) ? t(`nav.${current.key}`) : t('shell.allFeatures'));
 
   return (
     <header
@@ -153,8 +149,8 @@ export default function Header() {
                 ring,
               )}
             >
-              <SecondaryIcon size={15} strokeWidth={1.9} />
-              <span>{secondaryLabel}</span>
+              <LayoutGrid size={15} strokeWidth={1.9} />
+              <span>{t('shell.allFeatures')}</span>
               <ChevronDown size={14} className={cn('transition-transform duration-base', launcherOpen && 'rotate-180')} />
             </button>
             {launcherOpen && (
