@@ -5009,6 +5009,20 @@ func TestGetOrCreateWorkspaceAgent_InheritsSnapshotOptions(t *testing.T) {
 	if len(gotRunAsEnv) != 1 || gotRunAsEnv[0] != "SNAPSHOT_ONLY" {
 		t.Fatalf("workspace run_as_env = %#v, want snapshot value", wsAgent.opts["run_as_env"])
 	}
+
+	t.Run("keeps the Linux directory for a remote workspace", func(t *testing.T) {
+		globalAgent.opts["remote_host"] = "ssh-fixture"
+		globalAgent.opts["relay_host"] = "relay-fixture"
+		globalAgent.opts["work_dir"] = "/linux/repo"
+		clone, _, err := e.getOrCreateWorkspaceAgent(normalizeWorkspacePath(t.TempDir()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		opts := clone.(*namedStubWorkspaceOptionAgent).opts
+		if opts["remote_host"] != "ssh-fixture" || opts["relay_host"] != "relay-fixture" || opts["work_dir"] != "/linux/repo" {
+			t.Fatalf("remote workspace options: %v", opts)
+		}
+	})
 }
 
 func TestWorkspaceContext_PerChannelIndependence(t *testing.T) {
@@ -14514,18 +14528,22 @@ func TestStripTrailingSilent(t *testing.T) {
 	}{
 		{"trailing on new line", "Hello\nNO_REPLY", "Hello", true},
 		{"trailing lowercase on new line", "Hello\nno_reply", "Hello", true},
-		{"trailing after space", "Some reasoning here NO_REPLY", "Some reasoning here", true},
+		{"trailing after sentence end", "Some reasoning here. NO_REPLY", "Some reasoning here.", true},
+		{"word inside a sentence (#2021)", "Some reasoning here NO_REPLY", "Some reasoning here NO_REPLY", false},
 		{"multi-line then marker", "Line1\nLine2\nNO_REPLY", "Line1\nLine2", true},
-		{"trailing with markdown emphasis", "Done. *NO_REPLY*", "Done. *NO_REPLY*", false},
+		{"trailing with markdown emphasis", "Done. *NO_REPLY*", "Done.", true},
+		{"bold own line", "Done\n**NO_REPLY**", "Done", true},
 		{"trailing preceded by asterisks", "Done.**NO_REPLY", "Done.", true},
 		{"trailing with crlf", "Hello\r\nNO_REPLY", "Hello", true},
-		{"marker followed by trailing whitespace", "Hello NO_REPLY   ", "Hello", true},
+		{"marker followed by trailing whitespace", "Hello\nNO_REPLY   ", "Hello", true},
 
 		{"no marker", "Hello world", "Hello world", false},
 		{"marker not at end", "NO_REPLY then more", "NO_REPLY then more", false},
 		{"marker with suffix token", "Hello NO_REPLY_EXTRA", "Hello NO_REPLY_EXTRA", false},
 		{"marker touching prior letters", "somethingNO_REPLY", "somethingNO_REPLY", false},
-		{"glued after CJK segment", "哦 是这张NO_REPLY", "哦 是这张", true},
+		{"word after CJK (#2021)", "没漏洞只回 NO_REPLY", "没漏洞只回 NO_REPLY", false},
+		{"glued word after CJK (#2021)", "没漏洞只回NO_REPLY", "没漏洞只回NO_REPLY", false},
+		{"word after colon", "没问题就回：NO_REPLY", "没问题就回：NO_REPLY", false},
 		{"glued after CJK punctuation", "好的。NO_REPLY", "好的。", true},
 		{"glued after ascii punctuation", "done.NO_REPLY", "done.", true},
 		{"empty", "", "", false},

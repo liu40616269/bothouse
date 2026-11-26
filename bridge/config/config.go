@@ -88,6 +88,7 @@ var configMu configLock
 var ConfigPath string
 
 type Config struct {
+	TeamRemote  TeamRemoteConfig           `toml:"team_remote,omitempty"`
 	UsagePrices map[string]core.TokenPrice `toml:"usage_prices"`
 	// TurnSpendCap: USD one cron / timer / workspace turn may cost before it is stopped; unset = built-in (1 / 5 / 20).
 	TurnSpendCap   core.TurnSpendCaps `toml:"turn_spend_cap"`
@@ -125,14 +126,14 @@ type Config struct {
 	// Cleanup: the janitor (core/janitor.go, #1825). On unless enabled = false; dirs adds places
 	// whose children nobody touched for a week are removed, on top of the bridge's own (bgrun runs,
 	// iso-check test dirs, walkthrough runs).
-	Cleanup         CleanupConfig `toml:"cleanup"`
+	Cleanup CleanupConfig `toml:"cleanup"`
 	// Proactive: the door for messages roles send on their own (core/proactive_outbox.go, #1857):
 	// merge reminders due together, per-chat budget, back off when nobody answers. Off unless
 	// enabled = true (#1860).
-	Proactive ProactiveConfig `toml:"proactive"`
-	Hooks           []HookConfig  `toml:"hooks"`
-	IdleTimeoutMins *int          `toml:"idle_timeout_mins,omitempty"`  // max minutes between consecutive agent events; 0 = no timeout; default 120
-	MaxTurnTimeMins *int          `toml:"max_turn_time_mins,omitempty"` // absolute wall-clock cap per turn in minutes; 0 = disabled (default)
+	Proactive       ProactiveConfig `toml:"proactive"`
+	Hooks           []HookConfig    `toml:"hooks"`
+	IdleTimeoutMins *int            `toml:"idle_timeout_mins,omitempty"`  // max minutes between consecutive agent events; 0 = no timeout; default 120
+	MaxTurnTimeMins *int            `toml:"max_turn_time_mins,omitempty"` // absolute wall-clock cap per turn in minutes; 0 = disabled (default)
 	// TeamWatchCheckMins: minutes after a handoff before the watch looks at the workspace
 	// (core/team_watch.go). Process-wide. Unset or <= 0 = 10.
 	TeamWatchCheckMins *int `toml:"team_watch_check_mins,omitempty"`
@@ -754,6 +755,10 @@ type ProjectConfig struct {
 	// (core/team_task_assigner.go, #988). Default off (user 11-23 「做个开关默认关闭 有的人可能
 	// 不喜欢被打扰」); the assigner is still recorded on the board row either way.
 	MentionAssigner *bool `toml:"mention_assigner,omitempty"`
+	// KeepRunning (lead only): when a chat's task-board work runs out, the bridge wakes the chat's
+	// lead once to dispatch the next task or wrap up (core/team_lead_autowake.go). Unset = on;
+	// keep_running = false turns it off for every chat, board keep-running on|off overrides per chat.
+	KeepRunning *bool `toml:"keep_running,omitempty"`
 	// MentionHumanGate: gate human @ notifications so ordinary bot replies keep <@human> as text
 	// without pinging; only release posts (ws-pass, controlled by mention_assigner) and decision
 	// asks (ws-forward --ask-user / bothouse send --ask-user) ping, with short-window dedup
@@ -872,6 +877,9 @@ func (p ProjectConfig) PublicProgressEnabled() bool {
 // 2026-10-23 「默认打开」). They only act while gate_url is empty.
 // TeamWorkspacesEnabled reports team mode D (default on; only acts on the primary role).
 func (p ProjectConfig) TaskForumEnabled() bool { return p.TaskForum == nil || *p.TaskForum }
+
+// KeepRunningEnabled: default on — it only fires once per chat when its work runs out.
+func (p ProjectConfig) KeepRunningEnabled() bool { return p.KeepRunning == nil || *p.KeepRunning }
 
 // MentionAssignerEnabled: default off (user 11-23 「做个开关默认关闭」); mention_assigner = true
 // restores the #988 mentions.
@@ -1442,6 +1450,9 @@ func (c *Config) validate() error {
 }
 
 func (c *Config) validateInternal(permissive bool) error {
+	if err := c.TeamRemote.validate(c.Projects); err != nil {
+		return err
+	}
 	for model, price := range c.UsagePrices {
 		if err := price.Validate(); err != nil {
 			return fmt.Errorf("config: usage_prices.%s: %w", model, err)
@@ -3884,7 +3895,11 @@ type ProjectSettingsUpdate struct {
 	DisabledCommands     []string
 	WorkDir              *string
 	Mode                 *string
+	Model                *string
 	AgentType            *string
+	RemoteHost           *string
+	RelayHost            *string
+	SSHArgs              *[]string
 	ShowContextIndicator *bool
 	ShowWorkdirIndicator *bool
 	ReplyFooter          *bool
@@ -3945,7 +3960,8 @@ func SaveProjectSettings(projectName string, update ProjectSettingsUpdate) error
 				proj.TeamName = core.NextRoleName(core.AgentDisplayName(newType), taken)
 			}
 			wd, _ := proj.Agent.Options["work_dir"].(string)
-			if wd != "" {
+			rh, _ := proj.Agent.Options["remote_host"].(string)
+			if wd != "" && strings.TrimSpace(rh) == "" {
 				from, to := core.PersonaFilePath(proj.Agent.Type, wd), core.PersonaFilePath(newType, wd)
 				if from != to {
 					content, err := os.ReadFile(from)
@@ -4049,7 +4065,7 @@ func SaveProjectSettings(projectName string, update ProjectSettingsUpdate) error
 			v := *update.InjectSender
 			proj.InjectSender = &v
 		}
-		if update.WorkDir != nil || update.Mode != nil {
+		if update.WorkDir != nil || update.Mode != nil || update.Model != nil || update.RemoteHost != nil || update.RelayHost != nil || update.SSHArgs != nil {
 			if proj.Agent.Options == nil {
 				proj.Agent.Options = map[string]any{}
 			}
@@ -4068,6 +4084,46 @@ func SaveProjectSettings(projectName string, update ProjectSettingsUpdate) error
 				delete(proj.Agent.Options, "mode")
 			} else {
 				proj.Agent.Options["mode"] = mode
+			}
+		}
+		if update.Model != nil {
+			model := strings.TrimSpace(*update.Model)
+			if model == "" {
+				delete(proj.Agent.Options, "model")
+			} else {
+				proj.Agent.Options["model"] = model
+			}
+		}
+		if update.RemoteHost != nil {
+			rh := strings.TrimSpace(*update.RemoteHost)
+			if rh == "" {
+				delete(proj.Agent.Options, "remote_host")
+			} else {
+				proj.Agent.Options["remote_host"] = rh
+				if c, ok := proj.Agent.Options["cmd"].(string); ok && (strings.HasPrefix(c, "/Users/") || strings.HasPrefix(c, "/Applications/")) {
+					delete(proj.Agent.Options, "cmd")
+				}
+			}
+		}
+		if update.RelayHost != nil {
+			rl := strings.TrimSpace(*update.RelayHost)
+			if rl == "" {
+				delete(proj.Agent.Options, "relay_host")
+			} else {
+				proj.Agent.Options["relay_host"] = rl
+			}
+		}
+		if update.SSHArgs != nil {
+			cleaned := make([]string, 0, len(*update.SSHArgs))
+			for _, a := range *update.SSHArgs {
+				if t := strings.TrimSpace(a); t != "" {
+					cleaned = append(cleaned, t)
+				}
+			}
+			if len(cleaned) == 0 {
+				delete(proj.Agent.Options, "ssh_args")
+			} else {
+				proj.Agent.Options["ssh_args"] = cleaned
 			}
 		}
 		if update.PlatformAllowFrom != nil {
@@ -4146,6 +4202,26 @@ func GetProjectConfigDetails(projectName string) map[string]any {
 			}
 			if mode, ok := p.Agent.Options["mode"].(string); ok && strings.TrimSpace(mode) != "" {
 				result["mode"] = mode
+			}
+			if model, ok := p.Agent.Options["model"].(string); ok && strings.TrimSpace(model) != "" {
+				result["model"] = model
+			}
+			if rh, ok := p.Agent.Options["remote_host"].(string); ok && strings.TrimSpace(rh) != "" {
+				result["remote_host"] = rh
+			}
+			if rl, ok := p.Agent.Options["relay_host"].(string); ok && strings.TrimSpace(rl) != "" {
+				result["relay_host"] = rl
+			}
+			if rawSSH, ok := p.Agent.Options["ssh_args"].([]any); ok && len(rawSSH) > 0 {
+				args := make([]string, 0, len(rawSSH))
+				for _, v := range rawSSH {
+					if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+						args = append(args, strings.TrimSpace(s))
+					}
+				}
+				if len(args) > 0 {
+					result["ssh_args"] = args
+				}
 			}
 		}
 		if p.ShowContextIndicator != nil {
@@ -4460,6 +4536,18 @@ func GetGlobalSettings() map[string]any {
 		queueMax = *cfg.Queue.MaxDepth
 	}
 	result["queue_max_depth"] = queueMax
+	result["team_remote"] = cfg.TeamRemote
+	remoteProjects := make([]map[string]string, 0)
+	for _, p := range cfg.Projects {
+		if core.SupportsRemoteDevelopment(p.Agent.Type) {
+			name := p.TeamName
+			if name == "" {
+				name = p.Name
+			}
+			remoteProjects = append(remoteProjects, map[string]string{"name": p.Name, "display_name": name})
+		}
+	}
+	result["team_remote_projects"] = remoteProjects
 	result["review_simple_role"] = cfg.TeamReview.Simple
 	result["review_complex_role"] = cfg.TeamReview.Complex
 	result["review_simple_model"] = cfg.TeamReview.SimpleModel
@@ -4486,24 +4574,25 @@ type TeamReviewConfig struct {
 
 // GlobalSettingsUpdate holds fields to update in global config.
 type GlobalSettingsUpdate struct {
-	Language           *string `json:"language"`
-	AttachmentSend     *string `json:"attachment_send"`
-	LogLevel           *string `json:"log_level"`
-	IdleTimeoutMins    *int    `json:"idle_timeout_mins"`
-	ThinkingMessages   *bool   `json:"thinking_messages"`
-	ThinkingMaxLen     *int    `json:"thinking_max_len"`
-	ToolMessages       *bool   `json:"tool_messages"`
-	ToolMaxLen         *int    `json:"tool_max_len"`
-	StreamPreviewOn    *bool   `json:"stream_preview_enabled"`
-	StreamPreviewIntMs *int    `json:"stream_preview_interval_ms"`
-	RateLimitMax       *int    `json:"rate_limit_max_messages"`
-	RateLimitWindow    *int    `json:"rate_limit_window_secs"`
-	QueueMaxDepth      *int    `json:"queue_max_depth"`
-	ReviewSimpleRole   *string `json:"review_simple_role"`
-	ReviewComplexRole  *string `json:"review_complex_role"`
-	ReviewSimpleModel  *string `json:"review_simple_model"`
-	ReviewComplexModel *string `json:"review_complex_model"`
-	AvatarStyle        *string `json:"avatar_style"`
+	TeamRemote         *TeamRemoteConfig `json:"team_remote"`
+	Language           *string           `json:"language"`
+	AttachmentSend     *string           `json:"attachment_send"`
+	LogLevel           *string           `json:"log_level"`
+	IdleTimeoutMins    *int              `json:"idle_timeout_mins"`
+	ThinkingMessages   *bool             `json:"thinking_messages"`
+	ThinkingMaxLen     *int              `json:"thinking_max_len"`
+	ToolMessages       *bool             `json:"tool_messages"`
+	ToolMaxLen         *int              `json:"tool_max_len"`
+	StreamPreviewOn    *bool             `json:"stream_preview_enabled"`
+	StreamPreviewIntMs *int              `json:"stream_preview_interval_ms"`
+	RateLimitMax       *int              `json:"rate_limit_max_messages"`
+	RateLimitWindow    *int              `json:"rate_limit_window_secs"`
+	QueueMaxDepth      *int              `json:"queue_max_depth"`
+	ReviewSimpleRole   *string           `json:"review_simple_role"`
+	ReviewComplexRole  *string           `json:"review_complex_role"`
+	ReviewSimpleModel  *string           `json:"review_simple_model"`
+	ReviewComplexModel *string           `json:"review_complex_model"`
+	AvatarStyle        *string           `json:"avatar_style"`
 }
 
 // Avatar sets for Display.AvatarStyle.
@@ -4534,6 +4623,12 @@ func SaveGlobalSettings(u GlobalSettingsUpdate) error {
 	cfg := &Config{}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return fmt.Errorf("parse config: %w", err)
+	}
+	if u.TeamRemote != nil {
+		if err := u.TeamRemote.validate(cfg.Projects); err != nil {
+			return err
+		}
+		cfg.TeamRemote = *u.TeamRemote
 	}
 	if u.Language != nil {
 		cfg.Language = *u.Language
