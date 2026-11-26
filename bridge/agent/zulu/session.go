@@ -264,20 +264,55 @@ func (s *zuluSession) runTurn(prompt, messageID string, images []core.ImageAttac
 }
 
 type zuluStreamLine struct {
-	CID     string `json:"cid"`
-	Kind    string `json:"kind"`
-	Status  string `json:"status"`
-	Content string `json:"content"`
-	Error   string `json:"error"`
-	Message string `json:"message"`
+	CID     string          `json:"cid"`
+	Kind    string          `json:"kind"`
+	Status  string          `json:"status"`
+	Content string          `json:"content"`
+	Error   json.RawMessage `json:"error"`
+	Message string          `json:"message"`
 	Element *struct {
-		Type    string `json:"type"`
-		Content string `json:"content"`
+		Type     string `json:"type"`
+		Content  string `json:"content"`
+		ToolName string `json:"toolName"`
 	} `json:"element"`
 	Chunks []struct {
 		Kind  string `json:"kind"`
 		Delta string `json:"delta"`
 	} `json:"chunks"`
+}
+
+func zuluErrorText(raw json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return strings.TrimSpace(s)
+	}
+	var obj struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		if obj.Message != "" {
+			if obj.Code != "" {
+				return obj.Code + ": " + strings.TrimSpace(obj.Message)
+			}
+			return strings.TrimSpace(obj.Message)
+		}
+		return strings.TrimSpace(obj.Code)
+	}
+	return trimmed
+}
+
+func isZuluThinkingKind(k string) bool {
+	switch strings.ToLower(strings.TrimSpace(k)) {
+	case "thinking", "thought", "reasoning", "thinking-delta", "thought-delta", "reasoning-delta":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseZuluStreamLine(line string, streamedBytes *int) ([]core.Event, string, bool) {
@@ -289,12 +324,22 @@ func parseZuluStreamLine(line string, streamedBytes *int) ([]core.Event, string,
 	var out []core.Event
 	switch msg.Kind {
 	case "element-add":
-		if msg.Element != nil && msg.Element.Content != "" {
-			if strings.EqualFold(msg.Element.Type, "THINKING") {
-				out = append(out, core.Event{Type: core.EventThinking, Content: msg.Element.Content})
-			} else {
-				*streamedBytes += len(msg.Element.Content)
-				out = append(out, core.Event{Type: core.EventText, Content: msg.Element.Content})
+		if msg.Element != nil {
+			elemType := strings.ToUpper(strings.TrimSpace(msg.Element.Type))
+			switch {
+			case isZuluThinkingKind(elemType):
+				if msg.Element.Content != "" {
+					out = append(out, core.Event{Type: core.EventThinking, Content: msg.Element.Content})
+				}
+			case elemType == "TEXT":
+				if msg.Element.Content != "" {
+					*streamedBytes += len(msg.Element.Content)
+					out = append(out, core.Event{Type: core.EventText, Content: msg.Element.Content})
+				}
+			case elemType == "TOOL":
+				if msg.Element.ToolName != "" {
+					out = append(out, core.Event{Type: core.EventToolUse, ToolName: msg.Element.ToolName})
+				}
 			}
 		}
 	case "delta-batch":
@@ -302,18 +347,26 @@ func parseZuluStreamLine(line string, streamedBytes *int) ([]core.Event, string,
 			if c.Delta == "" {
 				continue
 			}
-			if c.Kind == "thinking-delta" {
+			chunkKind := strings.ToLower(strings.TrimSpace(c.Kind))
+			switch {
+			case isZuluThinkingKind(chunkKind):
 				out = append(out, core.Event{Type: core.EventThinking, Content: c.Delta})
-			} else {
+			case chunkKind == "text-delta":
 				*streamedBytes += len(c.Delta)
 				out = append(out, core.Event{Type: core.EventText, Content: c.Delta})
+			default:
+				// Ignore tool-output-delta, tool-params-delta, tool-metadata-patch, etc.
+				// so raw command stdout never leaks into the assistant's public reply.
 			}
 		}
 	case "completed":
 		if msg.Status != "" && msg.Status != "ok" && msg.Status != "Completed" {
-			errText := msg.Error
+			errText := zuluErrorText(msg.Error)
 			if errText == "" {
 				errText = msg.Message
+			}
+			if errText == "" {
+				errText = msg.Content
 			}
 			if errText == "" {
 				errText = "zulu run failed with status " + msg.Status

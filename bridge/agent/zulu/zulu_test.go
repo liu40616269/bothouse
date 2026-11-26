@@ -125,3 +125,30 @@ func TestZuluProviderAndOneAPITokenEnv(t *testing.T) {
 		t.Fatalf("remote script must not export macOS local CC_BIN/CC_DATA_DIR:\n%s", script)
 	}
 }
+
+func TestParseZuluStreamIgnoresToolOutputAndRoutesThinking(t *testing.T) {
+	streamed := 0
+	// 1. tool-output-delta must NOT be emitted as EventText
+	ev, _, done := parseZuluStreamLine(
+		`{"kind":"delta-batch","cid":"c1","chunks":[{"kind":"tool-output-delta","delta":"Command executed successfully.\nExit code: 0\nOutput:\nDarwin\n"},{"kind":"thought-delta","delta":"checking os"},{"kind":"text-delta","delta":"Hello"}]}`,
+		&streamed,
+	)
+	if done {
+		t.Fatalf("delta-batch must not finish turn")
+	}
+	if len(ev) != 2 || ev[0].Type != core.EventThinking || ev[0].Content != "checking os" || ev[1].Type != core.EventText || ev[1].Content != "Hello" {
+		t.Fatalf("unexpected delta-batch events: %+v", ev)
+	}
+	if streamed != len("Hello") {
+		t.Fatalf("streamedBytes = %d, want %d", streamed, len("Hello"))
+	}
+
+	// 2. completed with object error must parse cleanly
+	ev2, _, done2 := parseZuluStreamLine(
+		`{"kind":"completed","cid":"c1","status":"exception","error":{"code":"AUTH_REQUIRED","message":"No token"}}`,
+		&streamed,
+	)
+	if !done2 || len(ev2) != 1 || ev2[0].Type != core.EventError || !strings.Contains(ev2[0].Error.Error(), "AUTH_REQUIRED") {
+		t.Fatalf("unexpected completed error event: %+v", ev2)
+	}
+}
