@@ -22,6 +22,7 @@ export default function WikiGalaxyPage() {
   // Reload means "ask the framed page again", not "re-mount the panel": a changing key
   // re-creates the frame, which refetches the graph.
   const [reload, setReload] = useState(0);
+  const embedded = window.self !== window.top;
   const [availability, setAvailability] = useState<'checking' | 'running' | 'stopped' | 'error'>('checking');
   const [opening, setOpening] = useState(false);
 
@@ -99,26 +100,37 @@ export default function WikiGalaxyPage() {
                       : t('wikiGalaxy.dshErrorDesc', '连接 DSH 星河页面失败，请稍后刷新重试。')}
                   </p>
                 </div>
-                <DSHNotice status={availability} />
+                {embedded && <DSHNotice status={availability} />}
                 <div className="mt-1 flex flex-wrap items-center justify-center gap-2.5">
+                  {embedded ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={opening}
+                      onClick={() => {
+                        setOpening(true);
+                        void goToDsh(src).finally(() => setOpening(false));
+                      }}
+                    >
+                      {t('dshManage.openDsh')}
+                    </Button>
+                  ) : (
+                    <Link
+                      to="/forum"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-control bg-accent px-4 text-sm font-medium text-white shadow-ui-gloss-1 transition-colors duration-base hover:bg-accent-dim dark:text-black yellow:text-gray-900"
+                    >
+                      <Award size={15} />
+                      {t('nav.forum')}
+                    </Link>
+                  )}
                   <Button
-                    variant="primary"
+                    variant="secondary"
                     size="sm"
-                    disabled={opening}
-                    onClick={() => {
-                      setOpening(true);
-                      void goToDsh(src).finally(() => setOpening(false));
-                    }}
+                    onClick={() => { setAvailability('checking'); setReload((n) => n + 1); }}
                   >
-                    {t('dshManage.openDsh')}
+                    <RotateCw size={14} />
+                    {t('common.refresh', '刷新')}
                   </Button>
-                  <Link
-                    to="/forum"
-                    className="inline-flex h-8 items-center gap-1.5 rounded-control border border-hairline bg-surface-sunken px-3 text-xs font-medium text-ink transition-colors duration-base hover:bg-surface-sunken/80"
-                  >
-                    <Award size={14} className="text-accent-text" />
-                    {t('nav.forum')}
-                  </Link>
                 </div>
               </div>
             )}

@@ -65,12 +65,12 @@ describe('Wiki galaxy sub-page', () => {
     expect(c.textContent).toContain('dsh.readError');
   });
 
-  it('shows friendly empty state without raw 503 iframe when standalone and DSH is stopped', async () => {
+  it('shows friendly empty state without raw 503 iframe or broken open-DSH button when standalone and DSH is stopped', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     let c!: HTMLDivElement;
     await act(async () => { c = renderPage(); });
     expect(c.querySelector('iframe')).toBeNull();
-    expect(c.textContent).toContain('dsh.stopped');
+    expect(c.textContent).not.toContain('dshManage.openDsh');
     expect(c.textContent).toContain('nav.forum');
   });
 
