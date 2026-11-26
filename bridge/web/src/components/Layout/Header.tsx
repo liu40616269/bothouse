@@ -87,9 +87,13 @@ export default function Header() {
     setLangOpen(false);
   };
 
-  // On a launcher page the launcher button names that page, so the bar still says where you are.
-  const onSecondary = !isSetup && current && !isPrimary(current);
-  const SecondaryIcon = onSecondary ? current!.icon : LayoutGrid;
+  // On a launcher page (or add-role wizard) the launcher button names that page, so the bar still says where you are.
+  const isAddRole = pathname === '/setup' && !isSetup;
+  const onSecondary = !isSetup && ((Boolean(current) && !isPrimary(current!)) || isAddRole);
+  const SecondaryIcon = isAddRole ? Plus : (current && !isPrimary(current) ? current.icon : LayoutGrid);
+  const secondaryLabel = isAddRole
+    ? t('nav.addRole')
+    : (current && !isPrimary(current) ? t(`nav.${current.key}`) : t('shell.allFeatures'));
 
   return (
     <header
@@ -111,7 +115,7 @@ export default function Header() {
         <>
           {/* Phone: the page name; the tabs live in the bottom bar */}
           <span className="mr-auto min-w-0 truncate text-[15px] font-semibold text-ink md:hidden" data-testid="header-page-title">
-            {pageKey ? t(`nav.${pageKey}`) : ''}
+            {isAddRole ? t('nav.addRole') : (pageKey ? t(`nav.${pageKey}`) : '')}
           </span>
 
           <nav aria-label="bothouse" className="hidden min-w-0 items-center gap-0.5 rounded-[12px] bg-ink/[0.04] p-1 dark:bg-white/[0.05] md:flex">
@@ -150,7 +154,7 @@ export default function Header() {
               )}
             >
               <SecondaryIcon size={15} strokeWidth={1.9} />
-              <span>{onSecondary ? t(`nav.${current!.key}`) : t('shell.allFeatures')}</span>
+              <span>{secondaryLabel}</span>
               <ChevronDown size={14} className={cn('transition-transform duration-base', launcherOpen && 'rotate-180')} />
             </button>
             {launcherOpen && (
@@ -164,14 +168,6 @@ export default function Header() {
             )}
           </div>
           <span className="hidden flex-1 md:block" />
-          <NavLink
-            to="/setup?add=1"
-            className={cn('hidden h-9 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-accent px-3 text-[13px] font-semibold text-white shadow-ui-gloss-1 transition-colors duration-base hover:bg-accent-dim dark:text-black yellow:text-gray-900 md:flex', ring)}
-            title={t('nav.addRole')}
-          >
-            <Plus size={15} strokeWidth={2.2} />
-            <span className="hidden xl:inline">{t('nav.addRole')}</span>
-          </NavLink>
         </>
       )}
 
