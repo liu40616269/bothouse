@@ -431,6 +431,8 @@ type Engine struct {
 
 	displaySaveFunc  func(mode *string, thinkingMessages *bool, thinkingMaxLen, toolMaxLen *int, toolMessages *bool) error
 	configReloadFunc func() (*ConfigReloadResult, error)
+	getTeamRemote    func() TeamRemoteState
+	saveTeamRemote   func(TeamRemoteState) error
 
 	hooks              *HookManager
 	cronScheduler      *CronScheduler
@@ -1599,6 +1601,7 @@ var privilegedCommands = map[string]bool{
 	"shell":   true,
 	"show":    true,
 	"dir":     true,
+	"remote":  true,
 	"restart": true,
 	"upgrade": true,
 	"web":     true,
@@ -8866,6 +8869,7 @@ var builtinCommands = []struct {
 	{[]string{"doctor"}, "doctor"},
 	{[]string{"upgrade", "update"}, "upgrade"},
 	{[]string{"restart"}, "restart"},
+	{[]string{"remote"}, "remote"},
 	{[]string{"alias"}, "alias"},
 	{[]string{"delete", "del", "rm"}, "delete"},
 	{[]string{"bind"}, "bind"},
@@ -9098,6 +9102,8 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 		e.cmdUpgrade(p, msg, args)
 	case "restart":
 		e.cmdRestart(p, msg)
+	case "remote":
+		e.cmdRemote(p, msg, args)
 	case "alias":
 		e.cmdAlias(p, msg, args)
 	case "delete":

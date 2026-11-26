@@ -1501,6 +1501,33 @@ func buildProject(cfg *config.Config, configPath string, rootOpts rootCLIOptions
 	engine.SetConfigReloadFunc(func() (*core.ConfigReloadResult, error) {
 		return reloadConfig(configPath, capturedProjName, capturedEngine, startedPlatformOpts)
 	})
+	engine.SetTeamRemoteHooks(
+		func() core.TeamRemoteState {
+			c, err := config.Load(configPath)
+			if err != nil {
+				return core.TeamRemoteState{}
+			}
+			return core.TeamRemoteState{
+				Enabled:    c.TeamRemote.Enabled,
+				RemoteHost: c.TeamRemote.RemoteHost,
+				RelayHost:  c.TeamRemote.RelayHost,
+				WorkDir:    c.TeamRemote.WorkDir,
+				SSHArgs:    c.TeamRemote.SSHArgs,
+				Projects:   c.TeamRemote.Projects,
+			}
+		},
+		func(st core.TeamRemoteState) error {
+			tr := config.TeamRemoteConfig{
+				Enabled:    st.Enabled,
+				RemoteHost: st.RemoteHost,
+				RelayHost:  st.RelayHost,
+				WorkDir:    st.WorkDir,
+				SSHArgs:    st.SSHArgs,
+				Projects:   st.Projects,
+			}
+			return config.SaveGlobalSettings(config.GlobalSettingsUpdate{TeamRemote: &tr})
+		},
+	)
 
 	// Wire /web command callbacks
 	engine.SetWebSetupFunc(func() (int, string, bool, error) {
