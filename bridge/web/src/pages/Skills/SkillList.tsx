@@ -73,8 +73,10 @@ export default function SkillList() {
 
   const current = projects.find(p => p.project === activeProject);
   const lang = i18n.language || 'en';
-  // 这一屏的「一个发现」放在标题下：装在几个项目里、一共几个技能，答一眼就知道数量。
-  const skillTotal = projects.reduce((n, p) => n + (p.skills?.length || 0), 0);
+  // 按实际技能路径/名称去重统计，避免多角色共享全局技能目录时重复累加（如 3×30=90）。
+  const skillTotal = new Set(
+    projects.flatMap(p => (p.skills || []).map(s => s.source || s.name)),
+  ).size;
   const install = async (name: string) => {
     if (!activeProject) return;
     try { await installSkillPreset(name, activeProject); await refresh(); }
@@ -90,29 +92,31 @@ export default function SkillList() {
 
       {/* 分段控件用明度台阶表示选中，不用阴影：阴影房规只留给真正浮起来的浮层。 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label={t('skills.title')} className="flex w-fit gap-1 rounded-card bg-surface-sunken p-1">
-          {(['local', 'recommended'] as const).map(key => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => setTab(key)}
-              className={cn(
-                'rounded-control px-4 py-1.5 text-sm font-medium transition-colors duration-base ease-ui-out',
-                tab === key
-                  ? 'bg-surface text-ink border border-hairline'
-                  : 'text-ink-soft hover:text-ink',
-              )}
-            >
-              {t(`skills.tab.${key}`)}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="tablist" aria-label={t('skills.title')} className="flex w-fit gap-1 rounded-card bg-surface-sunken p-1">
+            {(['local', 'recommended'] as const).map(key => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={cn(
+                  'rounded-control px-4 py-1.5 text-sm font-medium transition-colors duration-base ease-ui-out',
+                  tab === key
+                    ? 'bg-surface text-ink border border-hairline'
+                    : 'text-ink-soft hover:text-ink',
+                )}
+              >
+                {t(`skills.tab.${key}`)}
+              </button>
+            ))}
+          </div>
+          {tab === 'local' && projects.length > 0 && (
+            <span className="text-xs text-ink-mute tabular-nums">
+              {projects.length} 个项目 · {skillTotal} 个技能
+            </span>
+          )}
         </div>
-        {tab === 'local' && projects.length > 0 && (
-          <span className="text-xs text-ink-mute tabular-nums">
-            {projects.length} 个项目 · {skillTotal} 个技能
-          </span>
-        )}
         {tab === 'recommended' && (
           <Button variant="ghost" size="sm" onClick={loadPresets}>
             <RefreshCw size={14} className="mr-1.5" />
