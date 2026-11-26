@@ -121,7 +121,7 @@
     "waiting": "待命中",
     "pausedNote": "已暂停，不接新消息",
     "offlineNote": "连不上",
-    "projectSessions": "各项目会话数"
+    "projectSessions": "各角色会话数"
   },
   "projects": {
     "title": "项目",

@@ -181,10 +181,9 @@ export default function Dashboard() {
             {warnCount > 0 ? t('dashboard.needsLook', { count: warnCount, defaultValue: '{{count}} 件事需要看一下' }) : t('dashboard.allGood', '一切正常')}
           </p>
         </div>
-        <div className="grid grid-cols-4 gap-2 lg:w-[460px]">
+        <div className="grid grid-cols-3 gap-2 lg:w-[350px]">
           {metric(t('nav.roles'), liveRows.length)}
           {metric(t('dashboard.platforms'), platformCount)}
-          {metric(t('dashboard.projects'), status?.projects_count ?? 0)}
           {metric(t('dashboard.busyNow', '在忙'), tally.busy)}
         </div>
       </section>
@@ -252,7 +251,7 @@ export default function Dashboard() {
             {/* #610: sessions per project sit under 正在发生 so the two columns end at similar heights */}
             {projectRows.length > 0 && (
               <section>
-                {cardHead(t('dashboard.projectSessions', '各项目会话数'), '/roles')}
+                {cardHead(t('dashboard.projectSessions', '各角色会话数'), '/roles')}
                 <div className="rounded-card bg-surface p-5 shadow-ui-1">
                   <Bars data={projectRows.slice(0, 6)} labelWidth={96} />
                 </div>
