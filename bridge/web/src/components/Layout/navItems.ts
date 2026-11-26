@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   Activity,
-  FolderKanban,
   MessageSquare,
   MessagesSquare,
   Clock,
@@ -47,7 +46,6 @@ export const navGroups: NavGroup[] = [
   {
     key: 'collab',
     items: [
-      { key: 'projects', path: '/projects', icon: FolderKanban },
       // 会话: every underlying session record, a log for looking things up rather than a daily page
       { key: 'sessions', path: '/sessions', icon: MessagesSquare },
       { key: 'cron', path: '/cron', icon: Clock },
@@ -94,6 +92,7 @@ const allItems: NavItem[] = [...primaryNav, ...navGroups.flatMap((g) => g.items)
 /** Nav item of the page at `pathname` (longest matching route). */
 export function navItemFor(pathname: string): NavItem | undefined {
   if (pathname === '/') return primaryNav[0];
+  if (pathname === '/projects' || pathname.startsWith('/projects/')) return primaryNav[1];
   let best: NavItem | undefined;
   for (const item of allItems) {
     if (item.path === '/') continue;

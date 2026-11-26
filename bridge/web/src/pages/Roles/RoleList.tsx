@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   RotateCw,
@@ -11,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Settings,
 } from 'lucide-react';
 import { Button, EmptyState, Modal, Badge, RoleAvatar, StatePill, roleState, ROLE_STATE_LABEL, type RoleState } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -248,7 +250,16 @@ export default function RoleList() {
                     <RoleAvatar name={shown} state={state} size={48} model={role.model} agentType={role.agent_type} />
                     <div className="min-w-0 flex-1 pt-0.5">
                       <div className="flex items-center gap-2">
-                        <p className="truncate text-[17px] font-semibold leading-6 tracking-tight text-ink">{shown}</p>
+                        {role.source !== 'dsh' ? (
+                          <Link
+                            to={`/projects/${encodeURIComponent(role.name)}`}
+                            className="truncate text-[17px] font-semibold leading-6 tracking-tight text-ink transition-colors hover:text-accent-text"
+                          >
+                            {shown}
+                          </Link>
+                        ) : (
+                          <p className="truncate text-[17px] font-semibold leading-6 tracking-tight text-ink">{shown}</p>
+                        )}
                         <StatePill state={state} />
                       </div>
                       {/* 型号和平台降级：后端 · 型号，一行小字 */}
@@ -259,6 +270,14 @@ export default function RoleList() {
                     </div>
                     {role.source !== 'dsh' && (
                       <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
+                        <Link
+                          to={`/projects/${encodeURIComponent(role.name)}`}
+                          title="配置"
+                          aria-label={`配置 ${shown}`}
+                          className="grid h-9 w-9 place-items-center rounded-control text-ink-mute transition-colors duration-base hover:bg-surface-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                        >
+                          <Settings size={16} />
+                        </Link>
                         <button
                           type="button"
                           onClick={() => handleTogglePause(role)}

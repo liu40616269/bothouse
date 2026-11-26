@@ -190,7 +190,7 @@ export default function ProjectDetail() {
         // Wait for service to come back up before navigating
         await waitForService(8000);
       }
-      navigate('/projects');
+      navigate('/roles');
     } catch (e: any) {
       alert(e?.message || String(e));
     } finally {
@@ -349,7 +349,7 @@ export default function ProjectDetail() {
     <div className="space-y-6 animate-fade-in ">
       {/* Back + title */}
       <div className="flex items-center gap-3">
-        <Link to="/projects" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+        <Link to="/roles" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="返回角色列表">
           <ArrowLeft size={18} className="text-gray-400" />
         </Link>
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">{roleLabel(headerName, selectedAgentType || project?.agent_type || '')}</h2>
