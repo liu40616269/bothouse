@@ -1137,6 +1137,18 @@ func (a *Agent) SkillDirs() []string {
 	return appendProjectClaudeSkillDirs(absDir, claudeConfigHomeDir())
 }
 
+// RemoteSkillConfig implements core.RemoteSkillProvider so remote Linux skills
+// are discovered over SSH when remote_host is configured.
+func (a *Agent) RemoteSkillConfig() (core.SSHExecConfig, string) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return core.SSHExecConfig{
+		RemoteHost: a.remoteHost,
+		RelayHost:  a.relayHost,
+		SSHArgs:    append([]string(nil), a.sshArgs...),
+	}, a.workDir
+}
+
 // ── ContextCompressor implementation ──────────────────────────
 
 func (a *Agent) CompressCommand() string { return "/compact" }

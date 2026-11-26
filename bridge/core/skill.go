@@ -21,8 +21,10 @@ type Skill struct {
 // SkillRegistry discovers and caches agent skills from skill directories.
 // Skills are project-level: each Engine has its own SkillRegistry.
 type SkillRegistry struct {
-	mu   sync.RWMutex
-	dirs []string
+	mu            sync.RWMutex
+	dirs          []string
+	remoteFetcher func() (dirs []string, skills []*Skill, active bool)
+	remoteDirs    []string
 	// cached results; nil means not yet scanned
 	cache []*Skill
 }
@@ -36,6 +38,17 @@ func (r *SkillRegistry) SetDirs(dirs []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.dirs = dirs
+	r.cache = nil
+}
+
+// SetRemoteFetcher registers a callback used to discover skills on a remote
+// SSH host when the agent is running in remote mode. When the callback returns
+// active=true, remote skills and directories are used instead of local dirs.
+func (r *SkillRegistry) SetRemoteFetcher(fn func() (dirs []string, skills []*Skill, active bool)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.remoteFetcher = fn
+	r.remoteDirs = nil
 	r.cache = nil
 }
 
@@ -60,11 +73,39 @@ func normalizeCommandName(s string) string {
 // ListAll returns all discovered skills. Results are cached after first scan.
 func (r *SkillRegistry) ListAll() []*Skill {
 	r.mu.RLock()
-	if r.cache != nil {
-		defer r.mu.RUnlock()
-		return r.cache
-	}
+	fetcher := r.remoteFetcher
+	cached := r.cache
 	r.mu.RUnlock()
+
+	if fetcher != nil {
+		remoteDirs, remoteSkills, active := fetcher()
+		if active {
+			var result []*Skill
+			seen := make(map[string]bool)
+			for _, sk := range remoteSkills {
+				if sk == nil {
+					continue
+				}
+				key := strings.ToLower(sk.Name)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				result = append(result, sk)
+			}
+			r.mu.Lock()
+			r.remoteDirs = append([]string(nil), remoteDirs...)
+			r.mu.Unlock()
+			return result
+		}
+		r.mu.Lock()
+		r.remoteDirs = nil
+		r.mu.Unlock()
+	}
+
+	if cached != nil {
+		return cached
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -148,18 +189,27 @@ func isDiscoverableSubdir(parentDir string, entry os.DirEntry) bool {
 	return err == nil && info.IsDir()
 }
 
-// Dirs returns the configured skill directories.
+// Dirs returns the configured skill directories. When remote mode is active and
+// remote directories have been discovered, those remote paths are returned.
 func (r *SkillRegistry) Dirs() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if r.remoteFetcher != nil && len(r.remoteDirs) > 0 {
+		return append([]string(nil), r.remoteDirs...)
+	}
 	return append([]string(nil), r.dirs...)
 }
 
 // Invalidate clears the cache so skills will be re-scanned on next access.
 func (r *SkillRegistry) Invalidate() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.cache = nil
+	r.remoteDirs = nil
+	hasRemote := r.remoteFetcher != nil
+	r.mu.Unlock()
+	if hasRemote {
+		InvalidateRemoteSkillCache()
+	}
 }
 
 // parseSkillMD parses a SKILL.md file with optional YAML frontmatter.

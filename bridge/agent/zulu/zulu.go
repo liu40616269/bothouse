@@ -420,6 +420,18 @@ func (a *Agent) SkillDirs() []string {
 	return dirs
 }
 
+// RemoteSkillConfig implements core.RemoteSkillProvider so remote Linux skills
+// are discovered over SSH when remote_host is configured.
+func (a *Agent) RemoteSkillConfig() (core.SSHExecConfig, string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return core.SSHExecConfig{
+		RemoteHost: a.remoteHost,
+		RelayHost:  a.relayHost,
+		SSHArgs:    append([]string(nil), a.sshArgs...),
+	}, a.workDir
+}
+
 func attachDirForWorkDir(workDir string) string {
 	return filepath.Join(workDir, ".cc-connect", "attachments")
 }

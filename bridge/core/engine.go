@@ -1087,6 +1087,19 @@ func NewEngine(name string, ag Agent, platforms []Platform, sessionStorePath str
 	if sp, ok := ag.(SkillProvider); ok {
 		e.skills.SetDirs(sp.SkillDirs())
 	}
+	if rsp, ok := ag.(RemoteSkillProvider); ok {
+		e.skills.SetRemoteFetcher(func() ([]string, []*Skill, bool) {
+			cfg, wd := rsp.RemoteSkillConfig()
+			if strings.TrimSpace(cfg.RemoteHost) == "" {
+				return nil, nil, false
+			}
+			dirs, skills, err := FetchRemoteSkills(context.Background(), cfg, wd)
+			if err != nil {
+				return nil, nil, true
+			}
+			return dirs, skills, true
+		})
+	}
 	e.board.addSource(e)    // maomao fork: report to the process's channel task board
 	e.teamExit.resolver = e // team mode C exit: workspaces recorded by block D
 
