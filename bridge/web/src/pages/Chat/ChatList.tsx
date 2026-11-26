@@ -121,11 +121,11 @@ export default function ChatList() {
             return (
               <li key={project.name}>
                 <Link
-                  to={`/chat/${project.name}`}
+                  to={latestSession ? `/chat/${project.name}?session=${encodeURIComponent(latestSession.id)}` : `/chat/${project.name}`}
                   className="group flex min-h-[72px] min-w-0 items-center gap-3.5 px-4 py-3.5 transition-colors duration-base hover:bg-surface-sunken/60 focus-visible:bg-surface-sunken focus-visible:outline-none sm:px-5"
                 >
                   <span className="relative shrink-0">
-                    <LibraryAvatar url={resolveRoleAvatar({ name, agentType: project.agent_type }, avatarStyle)} name={name} size={48} />
+                    <LibraryAvatar url={resolveRoleAvatar({ name, agentType: project.agent_type, model: project.model }, avatarStyle)} name={name} size={48} />
                     {hasLive && <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface p-[2px]"><span className="block h-2.5 w-2.5 rounded-full bg-emerald-500" /></span>}
                   </span>
                   <div className="min-w-0 flex-1">

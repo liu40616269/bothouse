@@ -29,20 +29,19 @@ interface Props {
 export default function SessionDrawer({ open, onClose, sessions, currentSessionId, onSelect, onNewSession }: Props) {
   const { t } = useTranslation();
 
+  if (!open) return null;
+
   return (
     <>
       {/* Backdrop */}
-      {open && (
-        <div className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 transition-opacity" onClick={onClose} />
-      )}
+      <div className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 transition-opacity" onClick={onClose} />
 
       {/* Drawer */}
       <div
         className={cn(
-          'fixed top-0 right-0 h-full w-80 z-50 flex flex-col transition-transform duration-300 ease-out',
+          'fixed top-0 right-0 h-full w-80 z-50 flex flex-col',
           'bg-white/95 backdrop-blur-xl border-l border-gray-200/80 shadow-2xl shadow-black/15',
           'dark:bg-[rgba(15,15,15,0.97)] dark:border-white/[0.08] dark:shadow-black/50',
-          open ? 'translate-x-0' : 'translate-x-full',
         )}
       >
         {/* Header */}

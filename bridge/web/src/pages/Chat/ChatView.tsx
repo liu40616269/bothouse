@@ -371,7 +371,7 @@ export default function ChatView() {
         setSessions(sorted);
         const target = selectedSessionId
           ? sorted.find(s => s.id === selectedSessionId)
-          : sorted.find(s => s.active && s.session_key === webSessionKey);
+          : sorted.find(s => s.active && s.session_key === webSessionKey) || sorted[0];
         if (!target) return;
         const detail = await getSession(projectName, target.id, 200);
         if (cancelled) return;
