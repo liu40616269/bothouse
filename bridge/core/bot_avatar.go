@@ -21,6 +21,13 @@ type BotAvatarGetter interface {
 	BotAvatarURL() string
 }
 
+// BotNameUpdater is an optional Platform interface for updating the connected
+// bot's display name (server nickname and/or global username) using its token.
+type BotNameUpdater interface {
+	BotUsername() string
+	UpdateBotName(ctx context.Context, name string) (updatedGuilds int, globalUpdated bool, err error)
+}
+
 const maxBotAvatarBytes = 8 * 1024 * 1024 // 8 MB (Discord avatar limit)
 
 var allowedAvatarMIMEs = map[string]bool{
@@ -71,6 +78,8 @@ func (m *ManagementServer) handleProjectAvatar(w http.ResponseWriter, r *http.Re
 	case http.MethodGet:
 		var platforms []string
 		var avatarURL string
+		var botUsername string
+		var supportsName bool
 		for _, p := range e.platforms {
 			if _, ok := p.(BotAvatarUpdater); ok {
 				platforms = append(platforms, p.Name())
@@ -80,58 +89,116 @@ func (m *ManagementServer) handleProjectAvatar(w http.ResponseWriter, r *http.Re
 					avatarURL = g.BotAvatarURL()
 				}
 			}
+			if nu, ok := p.(BotNameUpdater); ok {
+				supportsName = true
+				if botUsername == "" {
+					botUsername = nu.BotUsername()
+				}
+			}
 		}
 		mgmtJSON(w, http.StatusOK, map[string]any{
-			"supported":  len(platforms) > 0,
-			"platforms":  platforms,
-			"avatar_url": avatarURL,
+			"supported":     len(platforms) > 0,
+			"supports_name": supportsName,
+			"platforms":     platforms,
+			"avatar_url":    avatarURL,
+			"bot_username":  botUsername,
 		})
 
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 12*1024*1024)
 		var req struct {
 			DataURL string `json:"data_url"`
+			Name    string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			mgmtError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 			return
 		}
-		mimeType, imgBytes, err := parseAvatarDataURL(req.DataURL)
-		if err != nil {
-			mgmtError(w, http.StatusBadRequest, err.Error())
+		req.DataURL = strings.TrimSpace(req.DataURL)
+		req.Name = strings.TrimSpace(req.Name)
+		if req.DataURL == "" && req.Name == "" {
+			mgmtError(w, http.StatusBadRequest, "either data_url or name is required")
 			return
 		}
 
-		var updated []string
-		var latestURL string
-		var errs []string
-		for _, p := range e.platforms {
-			updater, ok := p.(BotAvatarUpdater)
-			if !ok {
-				continue
-			}
-			u, err := updater.UpdateBotAvatar(r.Context(), mimeType, imgBytes)
+		resp := map[string]any{}
+
+		if req.DataURL != "" {
+			mimeType, imgBytes, err := parseAvatarDataURL(req.DataURL)
 			if err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", p.Name(), err))
-				continue
-			}
-			updated = append(updated, p.Name())
-			if u != "" {
-				latestURL = u
-			}
-		}
-		if len(updated) == 0 {
-			if len(errs) > 0 {
-				mgmtError(w, http.StatusBadGateway, strings.Join(errs, "; "))
+				mgmtError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			mgmtError(w, http.StatusBadRequest, "no connected platform supports bot avatar updates")
-			return
+			var updated []string
+			var latestURL string
+			var errs []string
+			for _, p := range e.platforms {
+				updater, ok := p.(BotAvatarUpdater)
+				if !ok {
+					continue
+				}
+				u, err := updater.UpdateBotAvatar(r.Context(), mimeType, imgBytes)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", p.Name(), err))
+					continue
+				}
+				updated = append(updated, p.Name())
+				if u != "" {
+					latestURL = u
+				}
+			}
+			if len(updated) == 0 {
+				if len(errs) > 0 {
+					mgmtError(w, http.StatusBadGateway, strings.Join(errs, "; "))
+					return
+				}
+				mgmtError(w, http.StatusBadRequest, "no connected platform supports bot avatar updates")
+				return
+			}
+			resp["avatar_url"] = latestURL
+			resp["updated_platforms"] = updated
 		}
-		mgmtJSON(w, http.StatusOK, map[string]any{
-			"avatar_url":        latestURL,
-			"updated_platforms": updated,
-		})
+
+		if req.Name != "" {
+			if len([]rune(req.Name)) > 32 {
+				mgmtError(w, http.StatusBadRequest, "name must be 32 characters or fewer")
+				return
+			}
+			var updated []string
+			var totalGuilds int
+			var anyGlobal bool
+			var errs []string
+			for _, p := range e.platforms {
+				updater, ok := p.(BotNameUpdater)
+				if !ok {
+					continue
+				}
+				guilds, globalOK, err := updater.UpdateBotName(r.Context(), req.Name)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", p.Name(), err))
+					continue
+				}
+				updated = append(updated, p.Name())
+				totalGuilds += guilds
+				if globalOK {
+					anyGlobal = true
+				}
+			}
+			if len(updated) == 0 {
+				if len(errs) > 0 {
+					mgmtError(w, http.StatusBadGateway, strings.Join(errs, "; "))
+					return
+				}
+				mgmtError(w, http.StatusBadRequest, "no connected platform supports bot name updates")
+				return
+			}
+			resp["name"] = req.Name
+			resp["name_updated_platforms"] = updated
+			resp["updated_guilds"] = totalGuilds
+			resp["global_name_updated"] = anyGlobal
+		}
+
+		mgmtJSON(w, http.StatusOK, resp)
 
 	default:
 		mgmtError(w, http.StatusMethodNotAllowed, "GET or POST only")

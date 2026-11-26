@@ -663,7 +663,15 @@ export default function ProjectDetail() {
 
       {tab === 'settings' && project && (
         <div className="space-y-4">
-        <BotAvatarPanel project={project.name} />
+        <BotAvatarPanel
+          project={project.name}
+          currentDisplayName={displayName}
+          onNameSynced={(newName) => {
+            setDisplayName(newName);
+            setNameTouched(false);
+            void fetchAll();
+          }}
+        />
         {project.platform_configs?.some(p => p.type === 'qq') && <QQSettingsPanel project={project.name} platforms={project.platforms} restartSeq={restartSeq} />}
         {/* The official Bot is its own platform ("qqbot") with its own options, so it gets
             its own panel; sharing one block with the OneBot bridge would offer keys the

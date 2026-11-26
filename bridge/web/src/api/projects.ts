@@ -115,12 +115,20 @@ export const deleteProject = (name: string) =>
   }>(`/projects/${name}`);
 
 export const getProjectAvatar = (name: string) =>
-  api.get<{ supported: boolean; platforms: string[]; avatar_url: string }>(
-    `/projects/${encodeURIComponent(name)}/avatar`,
-  );
+  api.get<{
+    supported: boolean;
+    supports_name?: boolean;
+    platforms: string[];
+    avatar_url: string;
+    bot_username?: string;
+  }>(`/projects/${encodeURIComponent(name)}/avatar`);
 
-export const updateProjectAvatar = (name: string, dataURL: string) =>
-  api.post<{ avatar_url: string; updated_platforms: string[] }>(
-    `/projects/${encodeURIComponent(name)}/avatar`,
-    { data_url: dataURL },
-  );
+export const updateProjectAvatar = (name: string, payload: { data_url?: string; name?: string }) =>
+  api.post<{
+    avatar_url?: string;
+    updated_platforms?: string[];
+    name?: string;
+    name_updated_platforms?: string[];
+    updated_guilds?: number;
+    global_name_updated?: boolean;
+  }>(`/projects/${encodeURIComponent(name)}/avatar`, payload);
