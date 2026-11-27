@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MessagesSquare, RotateCw } from 'lucide-react';
-import { Button, LoadingState, PageHeader } from '@/components/ui';
+import { MessagesSquare, RotateCw, Settings2, Check } from 'lucide-react';
+import { Button, Card, LoadingState, PageHeader } from '@/components/ui';
+import AgentModelSelector from '@/components/AgentModelSelector';
 import { cn } from '@/lib/utils';
-import { getForum, type ForumPost, type ForumResp, type ForumThread, type ForumVoter } from '@/api/forum';
+import {
+  getForum,
+  getForumSettings,
+  updateForumSettings,
+  type ForumPost,
+  type ForumResp,
+  type ForumThread,
+  type ForumThreadSettings,
+  type ForumVoter,
+} from '@/api/forum';
 import { forumTexts, type ForumTexts } from './texts';
 
 /**
@@ -108,6 +118,37 @@ export default function ForumPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [threadBackend, setThreadBackend] = useState<'zulu' | 'ducc'>('zulu');
+  const [threadModel, setThreadModel] = useState('DeepSeek-V4.1-Flash');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
+
+  useEffect(() => {
+    getForumSettings()
+      .then((s: ForumThreadSettings) => {
+        setThreadBackend(s.backend === 'ducc' ? 'ducc' : 'zulu');
+        setThreadModel(s.model || '');
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    setSettingsSaved(false);
+    setSettingsError('');
+    try {
+      const saved = await updateForumSettings({ backend: threadBackend, model: threadModel.trim() });
+      setThreadBackend(saved.backend);
+      setThreadModel(saved.model);
+      setSettingsSaved(true);
+    } catch (e: unknown) {
+      setSettingsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,11 +299,66 @@ export default function ForumPage() {
         description={T.subtitle}
         icon={MessagesSquare}
         actions={
-          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
-            <RotateCw size={14} className={cn(loading && 'animate-spin')} /> {T.refresh}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={settingsOpen ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => { setSettingsOpen((v) => !v); setSettingsSaved(false); setSettingsError(''); }}
+            >
+              <Settings2 size={14} /> 归帖模型
+            </Button>
+            <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
+              <RotateCw size={14} className={cn(loading && 'animate-spin')} /> {T.refresh}
+            </Button>
+          </div>
         }
       />
+      {settingsOpen && (
+        <Card>
+          <div className="space-y-4 max-w-lg">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">记忆论坛归帖模型设置</h3>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                配置夜间自动归帖（<code className="font-mono">forum_threads.py</code>）使用的 CLI 引擎和模型，保存后立即生效，无需重启。
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-soft mb-1">归帖引擎</label>
+              <select
+                value={threadBackend}
+                onChange={(e) => {
+                  const next = e.target.value === 'ducc' ? 'ducc' : 'zulu';
+                  setThreadBackend(next);
+                  if (next === 'zulu' && !threadModel) setThreadModel('DeepSeek-V4.1-Flash');
+                  if (next === 'ducc' && threadModel === 'DeepSeek-V4.1-Flash') setThreadModel('');
+                  setSettingsSaved(false);
+                }}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline-strong bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-accent/50"
+              >
+                <option value="zulu">zulu (iDev / comate-agent，推荐)</option>
+                <option value="ducc">ducc (Claude Code / ducc)</option>
+              </select>
+            </div>
+            <AgentModelSelector
+              agentType={threadBackend === 'ducc' ? 'claudecode' : 'zulu'}
+              value={threadModel}
+              onChange={(m) => { setThreadModel(m); setSettingsSaved(false); }}
+              testIdPrefix="forum-thread-model"
+            />
+            <div className="flex items-center gap-3">
+              <Button size="sm" loading={savingSettings} onClick={handleSaveSettings}>
+                保存设置
+              </Button>
+              {settingsSaved && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  <Check size={13} /> 已保存（{threadBackend} · {threadModel || '默认'}）
+                </span>
+              )}
+              {settingsError && <span className="text-xs text-red-500">{settingsError}</span>}
+            </div>
+          </div>
+        </Card>
+      )}
       {body}
     </div>
   );

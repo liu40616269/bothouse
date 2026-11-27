@@ -431,6 +431,7 @@ func (m *ManagementServer) buildHandler(mux *http.ServeMux) http.Handler {
 	mux.HandleFunc(prefix+"/setup/models", m.wrap(m.handleSetupModels))
 	// 闸门设置页 (#217): 装好以后也能改谁在什么时候接话，以及闸门模型 API（jev）
 	mux.HandleFunc(prefix+"/forum", m.wrap(m.handleForum))
+	mux.HandleFunc(prefix+"/forum/settings", m.wrap(m.handleForumSettings))
 	mux.HandleFunc(prefix+"/setup/gate", m.wrap(m.handleSetupGateSettings))
 	mux.HandleFunc(prefix+"/setup/gate/save", m.wrap(m.handleSetupGateSave))
 	mux.HandleFunc(prefix+"/setup/gate/start", m.wrap(m.handleSetupGateStart))

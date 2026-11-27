@@ -14,7 +14,7 @@
 
 用户原话（11-07）：「我可以不断的在上面加新回答，就可以减少我们的那个条目跟就是我们的那个帖子的数量」。
 """
-import collections, hashlib, json, os, re, subprocess, sys, tempfile, time
+import collections, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -196,6 +196,127 @@ def grams(s):
     return {s[i:i + 2] for i in range(len(s) - 1)}
 
 
+CONFIG_FILE = HERE / "forum_threads_config.json"
+DEFAULT_BACKEND = "zulu"
+DEFAULT_ZULU_MODEL = "DeepSeek-V4.1-Flash"
+
+
+def _load_thread_config():
+    """读取记忆论坛归帖模型设置（默认 zulu + DeepSeek-V4.1-Flash）。"""
+    backend = os.environ.get("FORUM_THREADS_BACKEND", "").strip().lower()
+    model = os.environ.get("FORUM_THREADS_MODEL", "").strip()
+    if CONFIG_FILE.is_file():
+        try:
+            cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            if not backend and isinstance(cfg.get("backend"), str):
+                backend = cfg["backend"].strip().lower()
+            if not model and isinstance(cfg.get("model"), str):
+                model = cfg["model"].strip()
+        except Exception:
+            pass
+    if backend not in ("zulu", "ducc", "claude", "claudecode"):
+        backend = DEFAULT_BACKEND
+    if backend == "zulu" and not model:
+        model = DEFAULT_ZULU_MODEL
+    return backend, model
+
+
+def _detect_comate_username():
+    login_dir = Path.home() / ".comate" / "login-user"
+    if login_dir.is_dir():
+        for entry in sorted(login_dir.iterdir()):
+            if entry.is_file() and not entry.name.startswith("."):
+                return entry.name
+    return os.environ.get("ZULU_USERNAME") or os.environ.get("USER") or ""
+
+
+def _find_comate_agent():
+    bin_path = shutil.which("comate-agent")
+    if bin_path:
+        return [bin_path]
+    for cand in (
+        Path("/Applications/iDev.app/Contents/Resources/app/extensions/baiducomate.comate/dist/agent-daemon/comate-agent/dist/comate-agent-cli.js"),
+        Path.home() / "Applications/iDev.app/Contents/Resources/app/extensions/baiducomate.comate/dist/agent-daemon/comate-agent/dist/comate-agent-cli.js",
+    ):
+        if cand.is_file():
+            node = shutil.which("node")
+            if node:
+                return [node, str(cand)]
+    return None
+
+
+def _find_ducc_or_claude():
+    for cand in (
+        os.environ.get("CLAUDE_BIN", ""),
+        shutil.which("ducc") or "",
+        str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc"),
+        shutil.which("claude") or "",
+    ):
+        if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+def _ask_via_comate_agent(prompt, model):
+    cmd = _find_comate_agent()
+    if not cmd:
+        return None
+    user = _detect_comate_username()
+    full_cmd = [*cmd, "-p", "--mode", "json", "-w", tempfile.gettempdir(),
+                "--permission-mode", "full-access", "--append-system-prompt", "你只输出 JSON。"]
+    if user:
+        full_cmd.extend(["--username", user])
+    if model:
+        full_cmd.extend(["--model", model])
+    env = dict(os.environ)
+    env.setdefault("ONEAPI_CONTEXT_WINDOW", "1000000")
+    env.setdefault("ONEAPI_MAX_TOKENS", "32000")
+    r = subprocess.run(full_cmd, input=prompt, capture_output=True, text=True,
+                       cwd=tempfile.gettempdir(), env=env, timeout=ASK_TIMEOUT)
+    if r.returncode != 0:
+        raise RuntimeError(f"comate-agent 失败：rc={r.returncode} {(r.stderr or r.stdout)[-400:]}")
+    chunks = []
+    final_text = ""
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("type") == "message_update":
+            ame = ev.get("assistantMessageEvent") or {}
+            if ame.get("type") == "text_delta" and ame.get("delta"):
+                chunks.append(ame["delta"])
+        elif ev.get("type") == "agent_end" and ev.get("finalText"):
+            final_text = ev["finalText"]
+    txt = "".join(chunks) or final_text
+    m = re.search(r"\{.*\}", txt, re.S)
+    if not m:
+        raise RuntimeError(f"comate-agent 输出未包含 JSON：{txt[-300:]}")
+    return json.loads(m.group(0)), 0.0
+
+
+def _ask_via_ducc(prompt, model):
+    cli = _find_ducc_or_claude()
+    if not cli:
+        raise RuntimeError("未找到 ducc 或 claude CLI")
+    cmd = [cli, "-p", "--output-format", "json", "--permission-mode", "bypassPermissions",
+           "--tools", "", "--system-prompt", "你只输出 JSON。", "--setting-sources", ""]
+    if model:
+        cmd.extend(["--model", model])
+    r = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+                       cwd=tempfile.gettempdir(), timeout=ASK_TIMEOUT)
+    if r.returncode != 0:
+        raise RuntimeError(f"ducc/claude 失败：rc={r.returncode} {(r.stderr or r.stdout)[-400:]}")
+    j = json.loads(r.stdout)
+    m = re.search(r"\{.*\}", j.get("result", ""), re.S)
+    if not m:
+        raise RuntimeError(f"ducc/claude 输出未包含 JSON：{str(j.get('result', ''))[-300:]}")
+    return json.loads(m.group(0)), j.get("total_cost_usd", 0)
+
+
 def ask(prompt):
     if BASE:
         import urllib.error
@@ -218,12 +339,32 @@ def ask(prompt):
             except TimeoutError as e:
                 raise subprocess.TimeoutExpired("ask", ASK_TIMEOUT) from e
         return json.loads(re.search(r"\{.*\}", txt, re.S).group(0)), 0.0
-    r = subprocess.run([os.environ.get("CLAUDE_BIN", "claude"), "-p", "--model", MODEL, "--output-format", "json", "--tools", "",
-                        "--system-prompt", "你只输出 JSON。", "--setting-sources", ""],
-                       input=prompt, capture_output=True, text=True, cwd=tempfile.gettempdir(), timeout=ASK_TIMEOUT)
-    j = json.loads(r.stdout)
-    m = re.search(r"\{.*\}", j.get("result", ""), re.S)
-    return json.loads(m.group(0)), j.get("total_cost_usd", 0)
+
+    backend, model = _load_thread_config()
+    if backend == "zulu":
+        res = _ask_via_comate_agent(prompt, model)
+        if res is not None:
+            return res
+        zulu_bin = shutil.which("zulu")
+        if zulu_bin:
+            cmd = [zulu_bin, "run", "--display", "delta-stream", "--cwd", tempfile.gettempdir(),
+                   "--on-requires-action", "auto-approve", "--append-system-prompt", "你只输出 JSON。", "-q", prompt]
+            user = _detect_comate_username()
+            if user:
+                cmd.extend(["--username", user])
+            if model:
+                cmd.extend(["-m", model])
+            r = subprocess.run(cmd, capture_output=True, text=True, cwd=tempfile.gettempdir(), timeout=ASK_TIMEOUT)
+            if r.returncode != 0:
+                raise RuntimeError(f"zulu 失败：rc={r.returncode} {(r.stderr or r.stdout)[-400:]}")
+            m = re.search(r"\{.*\}", r.stdout, re.S)
+            if not m:
+                raise RuntimeError(f"zulu 输出未包含 JSON：{r.stdout[-300:]}")
+            return json.loads(m.group(0)), 0.0
+        # 本机没有 zulu/comate-agent 时自动降级到 ducc/claude
+        return _ask_via_ducc(prompt, "" if model == DEFAULT_ZULU_MODEL else model)
+
+    return _ask_via_ducc(prompt, model)
 
 
 def assign(dry=False):

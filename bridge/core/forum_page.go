@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -47,4 +50,86 @@ func (m *ManagementServer) handleForum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mgmtJSON(w, http.StatusOK, forumResp{Running: true, Forum: body})
+}
+
+type forumThreadSettings struct {
+	Backend string `json:"backend"` // "zulu" | "ducc"
+	Model   string `json:"model"`
+}
+
+const (
+	defaultForumThreadBackend = "zulu"
+	defaultForumThreadModel   = "DeepSeek-V4.1-Flash"
+)
+
+func (m *ManagementServer) forumSettingsPath() string {
+	dir := strings.TrimSpace(m.wizardDataDir)
+	if dir == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			dir = filepath.Join(home, ".bothouse")
+		}
+	}
+	return filepath.Join(dir, "gate", "forum_threads_config.json")
+}
+
+func (m *ManagementServer) loadForumSettings() forumThreadSettings {
+	cfg := forumThreadSettings{
+		Backend: defaultForumThreadBackend,
+		Model:   defaultForumThreadModel,
+	}
+	raw, err := os.ReadFile(m.forumSettingsPath())
+	if err != nil {
+		return cfg
+	}
+	var parsed forumThreadSettings
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return cfg
+	}
+	b := strings.ToLower(strings.TrimSpace(parsed.Backend))
+	if b == "zulu" || b == "ducc" {
+		cfg.Backend = b
+	}
+	cfg.Model = strings.TrimSpace(parsed.Model)
+	if cfg.Backend == "zulu" && cfg.Model == "" {
+		cfg.Model = defaultForumThreadModel
+	}
+	return cfg
+}
+
+func (m *ManagementServer) handleForumSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		mgmtJSON(w, http.StatusOK, m.loadForumSettings())
+	case http.MethodPut, http.MethodPost:
+		var req forumThreadSettings
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			mgmtError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		backend := strings.ToLower(strings.TrimSpace(req.Backend))
+		if backend == "claudecode" {
+			backend = "ducc"
+		}
+		if backend != "zulu" && backend != "ducc" {
+			mgmtError(w, http.StatusBadRequest, "backend must be zulu or ducc")
+			return
+		}
+		saved := forumThreadSettings{
+			Backend: backend,
+			Model:   strings.TrimSpace(req.Model),
+		}
+		path := m.forumSettingsPath()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			mgmtError(w, http.StatusInternalServerError, "create gate dir: "+err.Error())
+			return
+		}
+		data, _ := json.MarshalIndent(saved, "", "  ")
+		if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+			mgmtError(w, http.StatusInternalServerError, "write forum settings: "+err.Error())
+			return
+		}
+		mgmtJSON(w, http.StatusOK, saved)
+	default:
+		mgmtError(w, http.StatusMethodNotAllowed, "GET or PUT only")
+	}
 }

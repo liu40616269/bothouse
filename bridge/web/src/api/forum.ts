@@ -67,3 +67,12 @@ export interface ForumResp {
 }
 
 export const getForum = () => api.get<ForumResp>('/forum');
+
+export interface ForumThreadSettings {
+  backend: 'zulu' | 'ducc';
+  model: string;
+}
+
+export const getForumSettings = () => api.get<ForumThreadSettings>('/forum/settings');
+export const updateForumSettings = (body: ForumThreadSettings) =>
+  api.put<ForumThreadSettings>('/forum/settings', body);
