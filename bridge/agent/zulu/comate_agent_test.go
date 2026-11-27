@@ -103,3 +103,43 @@ func TestParseComateAgentModelsJSON(t *testing.T) {
 		t.Fatalf("unexpected second model: %+v", models[1])
 	}
 }
+
+func TestHandleComateAgentRPCStream(t *testing.T) {
+	sess := newZuluSession("node", nil, "/tmp", "", "", nil, "alice", "", "", "Opus 5.5", "yolo", "", "", "", "", "", nil)
+	sess.comateAgent = true
+
+	lines := []string{
+		`{"type":"response","id":"init-1","command":"daemon_initialize","success":true}`,
+		`{"type":"daemon_event","executionId":"exec-1","event":{"type":"run_started","sessionId":"sess-img-1"}}`,
+		`{"type":"daemon_event","executionId":"exec-1","event":{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"看到一张截图"}}}`,
+		`{"type":"daemon_event","executionId":"exec-1","event":{"type":"turn_end","message":{"usage":{"input":2000,"output":20}}}}`,
+		`{"type":"execution_finished","executionId":"exec-1","finalText":"看到一张截图"}`,
+	}
+
+	var streamed int
+	var full strings.Builder
+	var usage comateAgentUsage
+	done := false
+	for _, l := range lines {
+		if sess.handleComateAgentRPCLine(l, &streamed, &full, &usage) {
+			done = true
+		}
+	}
+	if !done {
+		t.Fatalf("expected execution_finished to mark turn complete")
+	}
+	if sess.CurrentSessionID() != "sess-img-1" {
+		t.Fatalf("expected session id sess-img-1, got %q", sess.CurrentSessionID())
+	}
+	var gotResult *core.Event
+	for len(sess.events) > 0 {
+		ev := <-sess.events
+		if ev.Type == core.EventResult {
+			cp := ev
+			gotResult = &cp
+		}
+	}
+	if gotResult == nil || gotResult.Content != "看到一张截图" || !gotResult.UsageKnown || gotResult.InputTokens != 2000 {
+		t.Fatalf("unexpected RPC result event: %+v", gotResult)
+	}
+}
