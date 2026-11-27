@@ -447,20 +447,84 @@ def batches(ts, prompt, fmt):
 CALLS = [0]  # 本次跑调了几次模型（打印用）
 
 
+def _find_judge_cli():
+    """优先 codex；本机未装 codex 时自动回退到 ducc / claude（支持 --json-schema）。"""
+    codex = shutil.which("codex")
+    if codex:
+        return "codex", codex
+    for cand in (
+        shutil.which("ducc"),
+        str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc"),
+        shutil.which("claude"),
+    ):
+        if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return "claude", cand
+    raise RuntimeError("未找到可用的判分 CLI（codex / ducc / claude）")
+
+
+def _extract_turns_from_claude_json(raw):
+    """解析 claude/ducc --output-format json --json-schema 的返回，提取 turns 列表。"""
+    text = raw.strip()
+    if not text:
+        raise RuntimeError("ducc/claude 返回为空")
+    # 某些 CLI 包装器可能输出多行日志 + 最后一行 JSON
+    data = None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    data = json.loads(line)
+                    break
+                except json.JSONDecodeError:
+                    continue
+    if not isinstance(data, dict):
+        raise RuntimeError(f"ducc/claude 输出不是有效 JSON：{text[-300:]}")
+    if data.get("is_error"):
+        raise RuntimeError(f"ducc/claude 报错：{str(data.get('result', ''))[-300:]}")
+    so = data.get("structured_output")
+    if isinstance(so, dict) and isinstance(so.get("turns"), list):
+        return so["turns"]
+    if isinstance(data.get("turns"), list):
+        return data["turns"]
+    res = data.get("result")
+    if isinstance(res, dict) and isinstance(res.get("turns"), list):
+        return res["turns"]
+    if isinstance(res, str) and res.strip():
+        m = re.search(r"\{[\s\S]*\}", res)
+        if m:
+            parsed = json.loads(m.group(0))
+            if isinstance(parsed, dict) and isinstance(parsed.get("turns"), list):
+                return parsed["turns"]
+    raise RuntimeError(f"ducc/claude 输出缺少 turns 字段：{text[-300:]}")
+
+
 def judge(batch, prompt, fmt, schema):
-    """一批交 codex；--output-schema 固定输出格式（codex exec --help：Path to a JSON Schema file describing the
-    model's final response shape）。返回 turns 列表。"""
+    """一批交模型按 JSON Schema 判分；优先 codex，未装 codex 时自动回退到 ducc / claude。返回 turns 列表。"""
     text = prompt + "\n\n".join(fmt(i, t) for i, t in enumerate(batch))
     CALLS[0] += 1
-    with tempfile.NamedTemporaryFile("w", suffix=".json") as sf, tempfile.NamedTemporaryFile("r", suffix=".txt") as out:
-        json.dump(schema, sf)
-        sf.flush()
-        r = subprocess.run(["codex", "exec", *(["-m", MODEL] if MODEL else []), "-c", "notify=[]", "--skip-git-repo-check",
-                            "-s", "read-only", "--output-schema", sf.name, "-o", out.name, "-"],
-                           input=text, capture_output=True, text=True)
-        if r.returncode != 0:
-            raise RuntimeError(f"codex 失败：rc={r.returncode} {r.stderr[-400:]}")
-        return json.loads(Path(out.name).read_text(encoding="utf-8"))["turns"]
+    kind, cli = _find_judge_cli()
+    if kind == "codex":
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as sf, tempfile.NamedTemporaryFile("r", suffix=".txt") as out:
+            json.dump(schema, sf)
+            sf.flush()
+            r = subprocess.run([cli, "exec", *(["-m", MODEL] if MODEL else []), "-c", "notify=[]", "--skip-git-repo-check",
+                                "-s", "read-only", "--output-schema", sf.name, "-o", out.name, "-"],
+                               input=text, capture_output=True, text=True)
+            if r.returncode != 0:
+                raise RuntimeError(f"codex 失败：rc={r.returncode} {r.stderr[-400:]}")
+            return json.loads(Path(out.name).read_text(encoding="utf-8"))["turns"]
+
+    cmd = [cli, "-p", "--output-format", "json", "--permission-mode", "bypassPermissions",
+           "--json-schema", json.dumps(schema, ensure_ascii=False)]
+    if MODEL:
+        cmd.extend(["--model", MODEL])
+    r = subprocess.run(cmd, input=text, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"ducc/claude 失败：rc={r.returncode} {(r.stderr or r.stdout)[-400:]}")
+    return _extract_turns_from_claude_json(r.stdout)
 
 
 def cites():
