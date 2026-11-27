@@ -19,6 +19,7 @@ func init() {
 // Agent drives the iDev Zulu CLI (`zulu run --display delta-stream`), locally or over SSH.
 type Agent struct {
 	cmd            string
+	comateAgent    bool // true when backed by new iDev `comate-agent` CLI
 	cliExtraArgs   []string
 	configEnv      []string
 	workDir        string
@@ -90,16 +91,34 @@ func New(opts map[string]any) (core.Agent, error) {
 	}
 
 	cmd, extraArgs := core.ParseCmdOpts(opts, "zulu")
+	comateAgent := false
 	if remoteHost == "" {
 		resolved, err := core.ResolveCLI(cmd)
 		if err != nil {
-			return nil, fmt.Errorf("zulu: %q %w", cmd, core.ErrCLINotFound)
+			if cmd == "zulu" || cmd == "comate-agent" {
+				if execBin, scriptPath, ok := core.ResolveLocalComateAgent(); ok {
+					cmd = execBin
+					if scriptPath != "" {
+						extraArgs = append([]string{scriptPath}, extraArgs...)
+					}
+					comateAgent = true
+				} else {
+					return nil, fmt.Errorf("zulu: %q %w", cmd, core.ErrCLINotFound)
+				}
+			} else {
+				return nil, fmt.Errorf("zulu: %q %w", cmd, core.ErrCLINotFound)
+			}
+		} else {
+			cmd = resolved
+			if strings.Contains(strings.ToLower(filepath.Base(resolved)), "comate-agent") {
+				comateAgent = true
+			}
 		}
-		cmd = resolved
 	}
 
 	return &Agent{
 		cmd:          cmd,
+		comateAgent:  comateAgent,
 		cliExtraArgs: extraArgs,
 		configEnv:    core.ParseConfigEnv(opts),
 		workDir:      workDir,
@@ -374,6 +393,7 @@ func (a *Agent) StartSession(_ context.Context, sessionID string) (core.AgentSes
 		extraEnv,
 	)
 	sess.modelFn = a.GetModel
+	sess.comateAgent = a.comateAgent
 	a.mu.Unlock()
 	return sess, nil
 }

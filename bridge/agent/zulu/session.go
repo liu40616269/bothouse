@@ -16,6 +16,7 @@ import (
 
 type zuluSession struct {
 	cmd          string
+	comateAgent  bool
 	extraArgs    []string
 	workDir      string
 	remoteHost   string
@@ -162,6 +163,10 @@ func saveImagesToDisk(workDir, messageID string, images []core.ImageAttachment) 
 }
 
 func (s *zuluSession) runTurn(prompt, messageID string, images []core.ImageAttachment, files []core.FileAttachment) {
+	if s.comateAgent && s.remoteHost == "" {
+		s.runComateAgentTurn(prompt, messageID, images, files)
+		return
+	}
 	var imgPaths []string
 	var filePaths []string
 	if s.remoteHost == "" {

@@ -200,6 +200,22 @@ func FetchZuluModels(ctx context.Context, cmdPath, remoteHost, relayHost string,
 			args = append(args, "--username", username)
 		}
 		out, err = exec.CommandContext(qctx, cmdPath, args...).Output()
+		if err != nil {
+			if execBin, scriptPath, ok := ResolveLocalComateAgent(); ok {
+				caArgs := make([]string, 0, 4)
+				if scriptPath != "" {
+					caArgs = append(caArgs, scriptPath)
+				}
+				caArgs = append(caArgs, "--list-models", "--mode", "json")
+				if caOut, caErr := exec.CommandContext(qctx, execBin, caArgs...).Output(); caErr == nil {
+					models := ParseComateAgentModelsJSON(caOut)
+					if len(models) > 0 {
+						setCachedModels(cacheKey, models)
+						return models
+					}
+				}
+			}
+		}
 	}
 	if err != nil {
 		return nil
