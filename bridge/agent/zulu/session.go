@@ -28,6 +28,7 @@ type zuluSession struct {
 	model        string
 	modelFn      func() string
 	mode         string
+	modeFn       func() string
 	workMode     string
 	thinking     string
 	effort       string
@@ -110,8 +111,18 @@ func (s *zuluSession) buildArgs(prompt string, imgPaths, filePaths []string) []s
 	if m := s.currentModel(); m != "" {
 		args = append(args, "-m", m)
 	}
-	if s.workMode != "" {
-		args = append(args, "--mode", s.workMode)
+	mode := s.currentMode()
+	workMode := s.workMode
+	if workMode == "" {
+		switch mode {
+		case "plan":
+			workMode = "Plan"
+		case "ask":
+			workMode = "Ask"
+		}
+	}
+	if workMode != "" {
+		args = append(args, "--mode", workMode)
 	}
 	if s.thinking != "" {
 		args = append(args, "--thinking", s.thinking)
@@ -122,7 +133,7 @@ func (s *zuluSession) buildArgs(prompt string, imgPaths, filePaths []string) []s
 	if s.appendPrompt != "" {
 		args = append(args, "--append-system-prompt", s.appendPrompt)
 	}
-	if s.mode == "yolo" {
+	if mode != "default" {
 		args = append(args, "--on-requires-action", "auto-approve")
 	}
 	for _, p := range imgPaths {
@@ -421,6 +432,15 @@ func (s *zuluSession) RespondPermission(_ string, _ core.PermissionResult) error
 
 func (s *zuluSession) Events() <-chan core.Event {
 	return s.events
+}
+
+func (s *zuluSession) currentMode() string {
+	if s.modeFn != nil {
+		if m := strings.TrimSpace(s.modeFn()); m != "" {
+			return normalizeMode(m)
+		}
+	}
+	return normalizeMode(s.mode)
 }
 
 func (s *zuluSession) currentModel() string {

@@ -143,3 +143,26 @@ func TestHandleComateAgentRPCStream(t *testing.T) {
 		t.Fatalf("unexpected RPC result event: %+v", gotResult)
 	}
 }
+
+func TestZuluWorkModesAutoApprove(t *testing.T) {
+	for _, m := range []string{"plan", "goal", "spec", "ask"} {
+		if got := normalizeMode(m); got != m {
+			t.Fatalf("normalizeMode(%q) = %q", m, got)
+		}
+		sess := newZuluSession("node", nil, "/tmp", "", "", nil, "alice", "", "", "Opus 5.5", m, "", "", "", "", "", nil)
+		sess.comateAgent = true
+		args := sess.buildComateAgentArgs()
+		if !slices.Contains(args, "--agent-mode") || !slices.Contains(args, m) {
+			t.Fatalf("mode %q expected --agent-mode %q in %v", m, m, args)
+		}
+		if !slices.Contains(args, "full-access") {
+			t.Fatalf("mode %q expected --permission-mode full-access in %v", m, args)
+		}
+	}
+	// Classic zulu plan mode maps to --mode Plan + auto-approve
+	classic := newZuluSession("zulu", nil, "/tmp", "", "", nil, "alice", "", "", "Opus 5.5", "plan", "", "", "", "", "", nil)
+	cargs := classic.buildArgs("hello", nil, nil)
+	if !slices.Contains(cargs, "--mode") || !slices.Contains(cargs, "Plan") || !slices.Contains(cargs, "auto-approve") {
+		t.Fatalf("classic zulu plan mode args unexpected: %v", cargs)
+	}
+}

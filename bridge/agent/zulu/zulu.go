@@ -140,8 +140,16 @@ func New(opts map[string]any) (core.Agent, error) {
 
 func normalizeMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "yolo", "bypass", "auto-approve":
+	case "yolo", "bypass", "bypasspermissions", "auto-approve", "agent":
 		return "yolo"
+	case "plan":
+		return "plan"
+	case "goal":
+		return "goal"
+	case "spec":
+		return "spec"
+	case "ask":
+		return "ask"
 	default:
 		return "default"
 	}
@@ -186,6 +194,19 @@ func (a *Agent) GetMode() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.mode
+}
+
+// PermissionModes implements core.ModeSwitcher so /mode in Discord and the
+// Settings page expose iDev's work modes alongside yolo/default.
+func (a *Agent) PermissionModes() []core.PermissionModeInfo {
+	return []core.PermissionModeInfo{
+		{Key: "yolo", Name: "YOLO (Agent)", NameZh: "Agent 自动执行", Desc: "Auto-approve all tool calls", DescZh: "默认 Agent 模式，免确认自动执行"},
+		{Key: "plan", Name: "Plan", NameZh: "Plan（先出计划）", Desc: "Research and draft a plan first (auto-approve reads)", DescZh: "先调研出计划，确认后再执行（读操作免确认）"},
+		{Key: "goal", Name: "Goal", NameZh: "Goal（目标推进）", Desc: "Continuously drive toward the goal until done", DescZh: "围绕目标持续推进，直到完成（免确认）"},
+		{Key: "spec", Name: "Spec", NameZh: "Spec（规范驱动）", Desc: "Transparent spec artifacts and controllable steps", DescZh: "产物透明、过程可见可干预（免确认）"},
+		{Key: "ask", Name: "Ask", NameZh: "Ask（只问答）", Desc: "Answer questions without editing code", DescZh: "只分析问答，不改代码（免确认）"},
+		{Key: "default", Name: "Default", NameZh: "默认（需确认）", Desc: "Require approval for tool actions", DescZh: "敏感工具调用需要确认"},
+	}
 }
 
 func (a *Agent) GetRemoteHost() string {
@@ -393,6 +414,7 @@ func (a *Agent) StartSession(_ context.Context, sessionID string) (core.AgentSes
 		extraEnv,
 	)
 	sess.modelFn = a.GetModel
+	sess.modeFn = a.GetMode
 	sess.comateAgent = a.comateAgent
 	a.mu.Unlock()
 	return sess, nil

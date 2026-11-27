@@ -92,7 +92,14 @@ const MODE_OPTIONS_BY_AGENT: Record<string, { value: string; label: string }[]> 
   qoder: GENERIC_YOLO_MODE_OPTIONS,
   opencode: GENERIC_YOLO_MODE_OPTIONS,
   kimi: GENERIC_YOLO_MODE_OPTIONS,
-  zulu: GENERIC_YOLO_MODE_OPTIONS,
+  zulu: [
+    { value: 'yolo', label: 'yolo (Agent 自动执行)' },
+    { value: 'plan', label: 'plan (先出计划，免工具确认)' },
+    { value: 'goal', label: 'goal (围绕目标持续推进)' },
+    { value: 'spec', label: 'spec (规范驱动，过程可见)' },
+    { value: 'ask', label: 'ask (只问答，不改代码)' },
+    { value: 'default', label: 'default (需确认)' },
+  ],
   iflow: [
     { value: 'default', label: 'default' },
     { value: 'auto-edit', label: 'auto-edit' },

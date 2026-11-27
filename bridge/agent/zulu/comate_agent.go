@@ -47,10 +47,15 @@ func (s *zuluSession) buildComateAgentArgs() []string {
 	if s.appendPrompt != "" {
 		args = append(args, "--append-system-prompt", s.appendPrompt)
 	}
-	if s.mode == "yolo" {
-		args = append(args, "--permission-mode", "full-access")
-	} else {
+	mode := s.currentMode()
+	switch mode {
+	case "plan", "goal", "spec", "ask":
+		args = append(args, "--agent-mode", mode)
+	}
+	if mode == "default" {
 		args = append(args, "--permission-mode", "approval-required")
+	} else {
+		args = append(args, "--permission-mode", "full-access")
 	}
 	return args
 }
@@ -258,10 +263,15 @@ func (s *zuluSession) buildComateAgentRPCArgs() []string {
 	if s.appendPrompt != "" {
 		args = append(args, "--append-system-prompt", s.appendPrompt)
 	}
-	if s.mode == "yolo" {
-		args = append(args, "--permission-mode", "full-access")
-	} else {
+	mode := s.currentMode()
+	switch mode {
+	case "plan", "goal", "spec", "ask":
+		args = append(args, "--agent-mode", mode)
+	}
+	if mode == "default" {
 		args = append(args, "--permission-mode", "approval-required")
+	} else {
+		args = append(args, "--permission-mode", "full-access")
 	}
 	return args
 }
@@ -372,6 +382,10 @@ func (s *zuluSession) runComateAgentRPCTurn(prompt, messageID string, images []c
 		"executionId": "exec-1",
 		"message":     prompt,
 		"images":      rpcImages,
+	}
+	switch s.currentMode() {
+	case "plan", "goal", "spec":
+		promptPayload["mode"] = s.currentMode()
 	}
 	initBytes, _ := json.Marshal(initPayload)
 	promptBytes, _ := json.Marshal(promptPayload)
