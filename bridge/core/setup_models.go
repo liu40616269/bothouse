@@ -195,27 +195,33 @@ func FetchZuluModels(ctx context.Context, cmdPath, remoteHost, relayHost string,
 		if username == "" {
 			username = DetectComateUsername()
 		}
-		args := []string{"list-model"}
-		if username != "" {
-			args = append(args, "--username", username)
-		}
-		out, err = exec.CommandContext(qctx, cmdPath, args...).Output()
-		if err != nil {
-			if execBin, scriptPath, ok := ResolveLocalComateAgent(); ok {
-				caArgs := make([]string, 0, 4)
-				if scriptPath != "" {
-					caArgs = append(caArgs, scriptPath)
-				}
-				caArgs = append(caArgs, "--list-models", "--mode", "json")
-				if caOut, caErr := exec.CommandContext(qctx, execBin, caArgs...).Output(); caErr == nil {
-					models := ParseComateAgentModelsJSON(caOut)
-					if len(models) > 0 {
-						setCachedModels(cacheKey, models)
-						return models
-					}
+		if !strings.Contains(strings.ToLower(cmdPath), "comate-agent") {
+			args := []string{"list-model"}
+			if username != "" {
+				args = append(args, "--username", username)
+			}
+			out, err = exec.CommandContext(qctx, cmdPath, args...).Output()
+			if err == nil {
+				if models := ParseZuluModelsJSON(out); len(models) > 0 {
+					setCachedModels(cacheKey, models)
+					return models
 				}
 			}
 		}
+		if execBin, scriptPath, ok := ResolveLocalComateAgent(); ok {
+			caArgs := make([]string, 0, 4)
+			if scriptPath != "" {
+				caArgs = append(caArgs, scriptPath)
+			}
+			caArgs = append(caArgs, "--list-models", "--mode", "json")
+			if caOut, caErr := exec.CommandContext(qctx, execBin, caArgs...).Output(); caErr == nil {
+				if models := ParseComateAgentModelsJSON(caOut); len(models) > 0 {
+					setCachedModels(cacheKey, models)
+					return models
+				}
+			}
+		}
+		return nil
 	}
 	if err != nil {
 		return nil
