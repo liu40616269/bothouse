@@ -491,25 +491,25 @@ def relevant(need, hits, topic, line_of, enough):
     return keep
 
 
-def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", focus="", need="", readonly=False):
+def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", focus="", need="", extra=False):
     """root 不给 = 主 wiki（hooks/wiki-context.py 终端会话就这样调）。skip = 开工套话的词：提示里已经带着的行不占名额。
     prepared=True：text 已经是 query() 清过的（context() 的 tq 带前两轮，再清一次会把前几轮里的引用块当块尾切掉）。
     key = 会话 key：按这个频道主要在做的项目给页排序（通用规矩页靠后）。
     need = 这轮的话（开工轮是活本身）：和它不相关的行标 weak，占名额不推（weak_lines、_cap_pages）；不给 = 不设下限。
-    readonly=True：只读外部知识库（GATE_EXTRA_WIKIS），不要求每级目录都有 README.md，也不走记忆论坛评分/投票。"""
+    extra=True：外部知识库（GATE_EXTRA_WIKIS），不要求每级目录都有 README.md、不按旧日期降权；照常接入记忆论坛排序/折叠/投票编号，但不被夜间脚本改写文件。"""
     root = root or WIKI
     if root is None or not root.is_dir():
         return []
-    idx = _index(root, require_readme=not readonly)
+    idx = _index(root, require_readme=not extra)
     q = text if prepared else query(text)
     pages, defer = {}, []
     if skip:  # 多取一些，跳掉的行由后面的补上（名额不放宽）
         hits = [h for h in idx.search(q, k=search.TOP * 3) if is_item(h[2]) and not in_prompt(h[2], skip)][:search.TOP]
     else:
         hits = [h for h in idx.search(q, k=search.TOP * (2 if key else 1)) if is_item(h[2])]  # 有频道时多取一倍候选：旧说法沉底后要有新的补位
-    if FORUM and not readonly:  # 记忆论坛：低分折叠沉底不隐藏，按 reddit confidence 稳定重排（forum_scores.py）；角色 wiki 同一份
+    if FORUM:  # 记忆论坛：低分折叠沉底不隐藏，按 reddit confidence 稳定重排（forum_scores.py）；角色 wiki 与外部知识库同一份
         hits = FORUM.rerank(hits, None if _same(root, WIKI) else root)
-    if key and not readonly and _same(root, WIKI):  # 按项目排序只对主 wiki（角色 wiki 是各角色自己的经验，不分项目）
+    if key and not extra and _same(root, WIKI):  # 按项目排序只对主 wiki（角色 wiki / 外部知识库不分频道项目）
         # 要判相关时就不再按「和这句有没有共同字」往前提：那正是字面撞词（「颗粒度」→ 壁纸行）的来路（#2031）
         hits = _by_project(hits, _profiles().get(key, ()), any(x in q for x in RULE_HINTS), "" if need else focus)
     if need:  # 先判相关、不相关的直接去掉，再排名额（#2031：不相关的行占着前三页，对题的行排在后面挤不进来）
@@ -517,16 +517,16 @@ def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", 
     shown_th = set()
     weak_of = [False] * len(hits)
     for (rel, ln, line), weak in zip(hits, weak_of):  # 按首次出现排页
-        if in_history(rel, ln, root) or (FORUM and not readonly and FORUM.collapsed(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root))):
+        if in_history(rel, ln, root) or (FORUM and FORUM.collapsed(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root))):
             continue  # 被取代挪进历史的、被踩到折叠的不推（#1978）；论坛页和手动搜照样看得到
-        th = None if readonly else _thread(rel, line, root)
+        th = None if extra else _thread(rel, line, root)
         if th and th["tid"] in shown_th:
             continue  # 同一帖的别的楼已经推过标题和最高分楼
         if rel not in pages:
             if len(pages) == k + 1:  # 多留一页：只有旧说法被沉底、前五条不够时才用它补位
                 continue
             pages[rel] = {"head": idx.desc.get(rel, "")[:DESC_CHARS], "sep": " | ", "rows": []}
-        mark = "" if readonly else cred(rel, ln, line, root)  # 【旧】/【未核】
+        mark = "" if extra else cred(rel, ln, line, root)  # 【旧】/【未核】
         if th:
             shown_th.add(th["tid"])
             rows = [dict(r, weak=True) if weak else r for r in _thread_rows(th, rel, root, line, mark)]
@@ -536,9 +536,8 @@ def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", 
                 else:
                     pages[rel]["rows"].append(r)
             continue  # 帖里的楼全在历史节或已折叠：整帖不推（#1978）
-        fold = "" if readonly else (FORUM.label(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root)) if FORUM else "")
-        tag = "" if readonly else exp_tag(rel, line)
-        row = _row(rel, line, f"{ln}: {fold}{mark}{_title(line)}{tag}", root=root, ln=ln)  # 只给标题+编号，细节自己按行号读；角色 wiki 的条也能投（编号只看这行内容）
+        fold = FORUM.label(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root)) if FORUM else ""
+        row = _row(rel, line, f"{ln}: {fold}{mark}{_title(line)}{exp_tag(rel, line)}", root=root, ln=ln)  # 只给标题+编号，细节自己按行号读；角色 wiki 与外部知识库的条也能投（编号只看这行内容）
         if weak:
             row["weak"] = True
         if "【旧】" in mark:
@@ -634,7 +633,7 @@ def context(req):
     extra_hits = []
     for ew in EXTRA_WIKIS:
         if ew.is_dir() and (WIKI is None or not _same(ew, WIKI)) and (not own or not _same(ew, own)):
-            extra_hits += match_wiki(tq, root=ew, skip=skip, prepared=True, key=key, focus=query(text), need=need, readonly=True)
+            extra_hits += match_wiki(tq, root=ew, skip=skip, prepared=True, key=key, focus=query(text), need=need, extra=True)
     if WIKI is None:
         return only_new({"wiki": [x for x in (who, pb, dm) if x] + board_items(req.get("key") or "") + extra_hits}, req, extra_paths={w["path"] for w in extra_hits})
     roots = [WIKI] + ([own] if own and not _same(own, WIKI) else [])
