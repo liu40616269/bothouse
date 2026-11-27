@@ -401,6 +401,16 @@ func DetectLocalCLIs(ctx context.Context) []LocalCLI {
 					bin, path, inPath = "dsh", p, false
 				}
 			}
+			if path == "" && s.agentType == "zulu" && os.Getenv("CONEST_TEST_SANDBOX") == "" {
+				if execBin, scriptPath, ok := ResolveLocalComateAgent(); ok {
+					bin, inPath = "comate-agent", false
+					if scriptPath != "" {
+						path = scriptPath
+					} else {
+						path = execBin
+					}
+				}
+			}
 			if path == "" && s.label == "WorkBuddy" && runtime.GOOS == "darwin" && fileExists("/Applications/WorkBuddy.app") {
 				bin, path, inPath = "WorkBuddy.app", "/Applications/WorkBuddy.app", true
 			}
@@ -416,7 +426,18 @@ func DetectLocalCLIs(ctx context.Context) []LocalCLI {
 			}
 			c.LoginEnvOnly = loginEnvOnly(s.agentType, c.Login, home)
 			if !strings.HasSuffix(path, ".app") {
-				c.Version = versionLine(ctx, path)
+				if strings.HasSuffix(path, ".js") {
+					if nodeBin, err := ResolveCLI("node"); err == nil {
+						tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+						b, err := probeCmd(tctx, nodeBin, path, "--version").Output()
+						cancel()
+						if err == nil {
+							c.Version = strings.TrimSpace(strings.SplitN(string(b), "\n", 2)[0])
+						}
+					}
+				} else {
+					c.Version = versionLine(ctx, path)
+				}
 			}
 			out[i] = c
 		}(i, s)
