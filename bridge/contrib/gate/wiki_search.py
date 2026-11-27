@@ -53,21 +53,25 @@ def toks(text):
     return out
 
 
-def _pages(root):
+def _pages(root, require_readme=True):
     for p in sorted(root.rglob("*.md")):
         rel = p.relative_to(root)
-        if len(rel.parts) < 2 or p.name == "README.md" or rel.parts[0] == "bin" \
+        if p.name == "README.md" or rel.parts[0] == "bin" \
                 or any(x.startswith(".") for x in rel.parts):
             continue
-        # 每一级目录都要有 README.md：没有的是脚本写的数据目录，不是子域
-        if all((root.joinpath(*rel.parts[:i]) / "README.md").exists() for i in range(1, len(rel.parts))):
-            yield rel.as_posix(), p.read_text(encoding="utf-8-sig", errors="ignore").split("\n")
+        if require_readme:
+            if len(rel.parts) < 2:
+                continue
+            # 每一级目录都要有 README.md：没有的是脚本写的数据目录，不是子域
+            if not all((root.joinpath(*rel.parts[:i]) / "README.md").exists() for i in range(1, len(rel.parts))):
+                continue
+        yield rel.as_posix(), p.read_text(encoding="utf-8-sig", errors="ignore").split("\n")
 
 
 class Index:
-    def __init__(self, root):
+    def __init__(self, root, require_readme=True, use_decay=True):
         self.lines, self.desc = [], {}
-        for rel, txt in _pages(Path(root)):
+        for rel, txt in _pages(Path(root), require_readme=require_readme):
             start = 0
             if txt and txt[0] == "---":
                 for j in range(1, len(txt)):
@@ -80,7 +84,7 @@ class Index:
                 if len(txt[k].strip()) >= MIN_LINE:
                     self.lines.append((rel, k + 1, txt[k], toks(txt[k])))
         today = datetime.date.today()
-        self.decay = [decay(l[2], today) for l in self.lines]
+        self.decay = [decay(l[2], today) if use_decay else 1.0 for l in self.lines]
         n = max(len(self.lines), 1)
         self.avg = sum(len(l[3]) for l in self.lines) / n or 1
         df = collections.Counter(t for l in self.lines for t in set(l[3]))

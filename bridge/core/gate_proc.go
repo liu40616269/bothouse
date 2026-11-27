@@ -198,9 +198,10 @@ var (
 
 // GateSupervisor starts, restarts and stops the local gate for one bothouse data dir.
 type GateSupervisor struct {
-	dataDir  string
-	dir      string // <data_dir>/gate
-	roleWiki string // the directory of the role wikis' bots.json (SetRoleWikiDir); "" = RoleWikiDir(dataDir)
+	dataDir    string
+	dir        string // <data_dir>/gate
+	roleWiki   string // the directory of the role wikis' bots.json (SetRoleWikiDir); "" = RoleWikiDir(dataDir)
+	extraWikis []string // read-only external knowledge wiki dirs (GATE_EXTRA_WIKIS)
 
 	op           sync.Mutex // one step / stop at a time: a gate being stopped is never seen as someone else's
 	mu           sync.Mutex
@@ -237,16 +238,34 @@ func (g *GateSupervisor) SetRoleWikiDir(dir string) {
 	g.mu.Unlock()
 }
 
+// SetExtraWikis configures read-only external knowledge wiki directories passed to gate via GATE_EXTRA_WIKIS.
+func (g *GateSupervisor) SetExtraWikis(dirs []string) {
+	g.mu.Lock()
+	g.extraWikis = append([]string(nil), dirs...)
+	g.mu.Unlock()
+}
+
 // gateWikiEnv: the wikis /context searches (contrib/gate/ctxsvc.py): GATE_WIKI = the main wiki (FindWiki, so
 // $WIKI_DIR counts), GATE_WIKI_BOTS = bots.json, whose entries name each role's own wiki. That file sits where the
 // wizard installed the programs (RoleWikiDir), which an isolated data dir keeps apart from the main wiki. A
 // GATE_WIKI already in the environment (e.g. "off") is kept.
-func gateWikiEnv(dataDir, roleWikiDir string) []string {
+func gateWikiEnv(dataDir, roleWikiDir string, extraWikis ...string) []string {
 	var env []string
 	if _, set := os.LookupEnv("GATE_WIKI"); !set {
 		mw, _ := FindWiki()
 		if mw != "" {
 			env = append(env, "GATE_WIKI="+mw)
+		}
+	}
+	if _, set := os.LookupEnv("GATE_EXTRA_WIKIS"); !set && len(extraWikis) > 0 {
+		var cleaned []string
+		for _, d := range extraWikis {
+			if s := strings.TrimSpace(d); s != "" {
+				cleaned = append(cleaned, s)
+			}
+		}
+		if len(cleaned) > 0 {
+			env = append(env, "GATE_EXTRA_WIKIS="+strings.Join(cleaned, string(os.PathListSeparator)))
 		}
 	}
 	if _, set := os.LookupEnv("GATE_PROFILE"); !set {
@@ -508,7 +527,7 @@ func (g *GateSupervisor) startLocked(python string) error {
 	}
 	cmd := exec.Command(python, "-c", gateLauncher)
 	cmd.Dir = g.dir
-	cmd.Env = append(append(os.Environ(), gateWikiEnv(g.dataDir, g.roleWiki)...),
+	cmd.Env = append(append(os.Environ(), gateWikiEnv(g.dataDir, g.roleWiki, g.extraWikis...)...),
 		// Both names point at the bridge's data dir so the gate never mixes it with an inherited one
 		// (contrib/gate/datadir.py: lead.json follows BOTHOUSE_DATA_DIR, the rest GATE_SETUP_DIR).
 		"GATE_SETUP_DIR="+g.dataDir,

@@ -68,14 +68,40 @@ def _title(line):
 _bots_env = os.environ.get("GATE_WIKI_BOTS", "").strip()
 BOTS = Path(_bots_env).expanduser() if _bots_env else None  # bots.json（core/rolewiki.go addRole 写）；没有 = 只查主 wiki
 
+
+def _parse_extra_wikis(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    parts = []
+    if raw.startswith("["):
+        try:
+            vals = json.loads(raw)
+            if isinstance(vals, list):
+                parts = [str(v).strip() for v in vals if str(v).strip()]
+        except ValueError:
+            parts = []
+    if not parts:
+        parts = [p.strip() for p in raw.split(os.pathsep) if p.strip()]
+    out = []
+    for p in parts:
+        path = Path(p).expanduser()
+        if not any(_same(path, existing) for existing in out):
+            out.append(path)
+    return out
+
+
+EXTRA_WIKIS = _parse_extra_wikis(os.environ.get("GATE_EXTRA_WIKIS", ""))
+
 _idx, _idx_at = {}, {}  # 每个根各自缓存：两个 bot 交替来问不互相冲掉索引
 
 
-def _index(root=None):
+def _index(root=None, require_readme=True):
     root = root or WIKI
-    if root not in _idx or time.time() - _idx_at.get(root, 0.0) >= TTL:
-        _idx[root], _idx_at[root] = search.Index(root), time.time()
-    return _idx[root]
+    key = (root, require_readme)
+    if key not in _idx or time.time() - _idx_at.get(key, 0.0) >= TTL:
+        _idx[key], _idx_at[key] = search.Index(root, require_readme=require_readme, use_decay=require_readme), time.time()
+    return _idx[key]
 
 
 _bots, _bots_at, _bots_src = {}, 0.0, None
@@ -465,24 +491,25 @@ def relevant(need, hits, topic, line_of, enough):
     return keep
 
 
-def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", focus="", need=""):
+def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", focus="", need="", readonly=False):
     """root 不给 = 主 wiki（hooks/wiki-context.py 终端会话就这样调）。skip = 开工套话的词：提示里已经带着的行不占名额。
     prepared=True：text 已经是 query() 清过的（context() 的 tq 带前两轮，再清一次会把前几轮里的引用块当块尾切掉）。
     key = 会话 key：按这个频道主要在做的项目给页排序（通用规矩页靠后）。
-    need = 这轮的话（开工轮是活本身）：和它不相关的行标 weak，占名额不推（weak_lines、_cap_pages）；不给 = 不设下限。"""
+    need = 这轮的话（开工轮是活本身）：和它不相关的行标 weak，占名额不推（weak_lines、_cap_pages）；不给 = 不设下限。
+    readonly=True：只读外部知识库（GATE_EXTRA_WIKIS），不要求每级目录都有 README.md，也不走记忆论坛评分/投票。"""
     root = root or WIKI
     if root is None or not root.is_dir():
         return []
-    idx = _index(root)
+    idx = _index(root, require_readme=not readonly)
     q = text if prepared else query(text)
     pages, defer = {}, []
     if skip:  # 多取一些，跳掉的行由后面的补上（名额不放宽）
         hits = [h for h in idx.search(q, k=search.TOP * 3) if is_item(h[2]) and not in_prompt(h[2], skip)][:search.TOP]
     else:
         hits = [h for h in idx.search(q, k=search.TOP * (2 if key else 1)) if is_item(h[2])]  # 有频道时多取一倍候选：旧说法沉底后要有新的补位
-    if FORUM:  # 记忆论坛：低分折叠沉底不隐藏，按 reddit confidence 稳定重排（forum_scores.py）；角色 wiki 同一份
+    if FORUM and not readonly:  # 记忆论坛：低分折叠沉底不隐藏，按 reddit confidence 稳定重排（forum_scores.py）；角色 wiki 同一份
         hits = FORUM.rerank(hits, None if _same(root, WIKI) else root)
-    if key and _same(root, WIKI):  # 按项目排序只对主 wiki（角色 wiki 是各角色自己的经验，不分项目）
+    if key and not readonly and _same(root, WIKI):  # 按项目排序只对主 wiki（角色 wiki 是各角色自己的经验，不分项目）
         # 要判相关时就不再按「和这句有没有共同字」往前提：那正是字面撞词（「颗粒度」→ 壁纸行）的来路（#2031）
         hits = _by_project(hits, _profiles().get(key, ()), any(x in q for x in RULE_HINTS), "" if need else focus)
     if need:  # 先判相关、不相关的直接去掉，再排名额（#2031：不相关的行占着前三页，对题的行排在后面挤不进来）
@@ -490,16 +517,16 @@ def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", 
     shown_th = set()
     weak_of = [False] * len(hits)
     for (rel, ln, line), weak in zip(hits, weak_of):  # 按首次出现排页
-        if in_history(rel, ln, root) or (FORUM and FORUM.collapsed(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root))):
+        if in_history(rel, ln, root) or (FORUM and not readonly and FORUM.collapsed(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root))):
             continue  # 被取代挪进历史的、被踩到折叠的不推（#1978）；论坛页和手动搜照样看得到
-        th = _thread(rel, line, root)
+        th = None if readonly else _thread(rel, line, root)
         if th and th["tid"] in shown_th:
             continue  # 同一帖的别的楼已经推过标题和最高分楼
         if rel not in pages:
             if len(pages) == k + 1:  # 多留一页：只有旧说法被沉底、前五条不够时才用它补位
                 continue
             pages[rel] = {"head": idx.desc.get(rel, "")[:DESC_CHARS], "sep": " | ", "rows": []}
-        mark = cred(rel, ln, line, root)  # 【旧】/【未核】
+        mark = "" if readonly else cred(rel, ln, line, root)  # 【旧】/【未核】
         if th:
             shown_th.add(th["tid"])
             rows = [dict(r, weak=True) if weak else r for r in _thread_rows(th, rel, root, line, mark)]
@@ -509,8 +536,9 @@ def match_wiki(text, k=TOP_PAGES, root=None, skip=None, prepared=False, key="", 
                 else:
                     pages[rel]["rows"].append(r)
             continue  # 帖里的楼全在历史节或已折叠：整帖不推（#1978）
-        fold = FORUM.label(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root)) if FORUM else ""
-        row = _row(rel, line, f"{ln}: {fold}{mark}{_title(line)}{exp_tag(rel, line)}", root=root, ln=ln)  # 只给标题+编号，细节自己按行号读；角色 wiki 的条也能投（编号只看这行内容）
+        fold = "" if readonly else (FORUM.label(FORUM.entry_id(rel, line, None if _same(root, WIKI) else root)) if FORUM else "")
+        tag = "" if readonly else exp_tag(rel, line)
+        row = _row(rel, line, f"{ln}: {fold}{mark}{_title(line)}{tag}", root=root, ln=ln)  # 只给标题+编号，细节自己按行号读；角色 wiki 的条也能投（编号只看这行内容）
         if weak:
             row["weak"] = True
         if "【旧】" in mark:
@@ -603,17 +631,21 @@ def context(req):
     key = req.get("key") or ""
     need = kq or query(text)  # 相关度下限按这句话判（开工轮按活本身，不按开工套话）
     mine = match_wiki(tq, root=own, skip=skip, prepared=True, key=key, focus=query(text), need=need) if own and not _same(own, WIKI) else []  # 同一个库（真实路径）只查一次
+    extra_hits = []
+    for ew in EXTRA_WIKIS:
+        if ew.is_dir() and (WIKI is None or not _same(ew, WIKI)) and (not own or not _same(ew, own)):
+            extra_hits += match_wiki(tq, root=ew, skip=skip, prepared=True, key=key, focus=query(text), need=need, readonly=True)
     if WIKI is None:
-        return only_new({"wiki": [x for x in (who, pb, dm) if x] + board_items(req.get("key") or "")}, req)
+        return only_new({"wiki": [x for x in (who, pb, dm) if x] + board_items(req.get("key") or "") + extra_hits}, req, extra_paths={w["path"] for w in extra_hits})
     roots = [WIKI] + ([own] if own and not _same(own, WIKI) else [])
     notices = []
     dec = decision_items(text, key, notices)
     out = {"wiki": [x for x in (who, pb, dm) if x] + memory_caps(roots, own) + standing_items(roots) + profile_items(roots, req.get("sender"), bot) + corrected_items(bot, key) + board_items(key)
            + proposal_items(text, bot, key)
-           + with_lessons(match_wiki(tq, skip=skip, prepared=True, key=key, focus=query(text), need=need), tq, skip, prepared=True, need=need) + mine + dec}  # 主 wiki 在前；经验并进 wiki 推荐，按话题命中才出
+           + with_lessons(match_wiki(tq, skip=skip, prepared=True, key=key, focus=query(text), need=need), tq, skip, prepared=True, need=need) + mine + extra_hits + dec}  # 主 wiki 在前；经验并进 wiki 推荐，按话题命中才出
     if MEMVOTE.exists() and any(EXP_TAG.search(w.get("desc", "")) for w in out["wiki"]):
         out["wiki"].append(VOTE_ITEM)  # 固定 path：每个会话只推一次（gate.go turnContext 按 path 去重）
-    out = only_new(out, req, own_paths={w["path"] for w in mine})  # 去重后再在两库间分配额度
+    out = only_new(out, req, own_paths={w["path"] for w in mine}, extra_paths={w["path"] for w in extra_hits})  # 去重后再在各库间分配额度
     if notices:
         out["notice"] = notices  # 给人看的提醒，gate.go turnContext 发到这个聊天（静音群转主人私聊）
     try:
@@ -1348,13 +1380,14 @@ def _hit_page(w):
     return "rows" in w and not str(w.get("path", "")).startswith("【")
 
 
-def _cap_pages(items, own_paths):
-    """两库的新条按各自已有排名轮流取；只有一个库时独占剩余额度。
+def _cap_pages(items, own_paths, extra_paths=()):
+    """各库的新条按各自已有排名轮流取；只有一个库时独占剩余额度。
     标了 weak 的行（match_wiki：和这轮的话不相关）照样占它轮到的名额，但不推、不记推过、不从后面补位。"""
-    groups = [collections.deque(), collections.deque()]
+    groups = [collections.deque(), collections.deque(), collections.deque()]
     for i, w in enumerate(items):
         if _hit_page(w):
-            groups[w["path"] in own_paths].extend((i, r) for r in w["rows"])
+            g = 2 if w["path"] in extra_paths else (1 if w["path"] in own_paths else 0)
+            groups[g].extend((i, r) for r in w["rows"])
     selected = collections.defaultdict(list)
     left = TURN_ROWS
     while left and any(groups):
@@ -1368,13 +1401,13 @@ def _cap_pages(items, own_paths):
             for i, w in enumerate(items) if not _hit_page(w) or selected[i]]
 
 
-def only_new(out, req, own_paths=()):
+def only_new(out, req, own_paths=(), extra_paths=()):
     items = [as_doc(w) for w in out.get("wiki", [])]
     if any("cid" in w for w in items):  # 有折成目录的块才说怎么取（wiki 命中行带页路径和行号，照旧能按行号读）
         items.insert(0, HOWTO)
     epoch = str(req.get("epoch") or "")
     if not epoch:
-        plain = [_plain(w) for w in _cap_pages(items, own_paths)]
+        plain = [_plain(w) for w in _cap_pages(items, own_paths, extra_paths)]
         return dict(out, wiki=plain)
     k = (req.get("key") or "", req.get("bot") or "", epoch)
     keep = []
@@ -1408,7 +1441,7 @@ def only_new(out, req, own_paths=()):
                     pending.add(r["id"])
             if rows:
                 keep.append(_render(dict(w, rows=rows)) if rows != w["rows"] else w)
-        keep = _cap_pages(keep, own_paths)
+        keep = _cap_pages(keep, own_paths, extra_paths)
         for w in keep:
             for r in w.get("rows", []):
                 seen[r["id"]] = n  # 超额的不记推过，下一轮还能推

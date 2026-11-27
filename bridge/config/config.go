@@ -269,7 +269,8 @@ type ProactiveConfig struct {
 }
 
 type GateConfig struct {
-	Port int `toml:"port,omitempty"` // 127.0.0.1 port of this data dir's gate; default 9930 (contrib/gate/gate.py); the wizard picks another when 9930 belongs to another install
+	Port       int      `toml:"port,omitempty"`        // 127.0.0.1 port of this data dir's gate; default 9930 (contrib/gate/gate.py); the wizard picks another when 9930 belongs to another install
+	ExtraWikis []string `toml:"extra_wikis,omitempty"` // read-only external knowledge wiki dirs searched by gate ctxsvc.py
 }
 
 // Display mode constants.
