@@ -63,8 +63,18 @@ def codex_ask(prompt):
 
 
 def claude_ask(prompt, model="sonnet"):
-    """claude -p（命令行引擎，同 ingest 的 api-sonnet|sonnet 那一档）；RESTATE_ENGINE=claude:<模型> 选它。"""
-    r = subprocess.run(["claude", "-p", "--model", model, prompt], capture_output=True, text=True, cwd=tempfile.gettempdir())
+    """claude -p（命令行引擎，同 ingest 的 api-sonnet|sonnet 那一档）；本机未装 claude 时自动回退到 ducc。"""
+    import shutil
+    cli = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+    if cli:
+        cmd = [cli, "-p", "--model", model, prompt]
+    else:
+        ducc = next((c for c in (shutil.which("ducc"), str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc")) if c and os.path.isfile(c) and os.access(c, os.X_OK)), None)
+        if ducc:
+            cmd = [ducc, "-p", "--permission-mode", "bypassPermissions", *(["--model", model] if model not in ("haiku", "sonnet", "opus") else []), prompt]
+        else:
+            cmd = ["claude", "-p", "--model", model, prompt]
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=tempfile.gettempdir())
     if r.returncode != 0:
         raise RuntimeError(f"claude 失败：rc={r.returncode} {r.stderr[-400:]}")
     return r.stdout

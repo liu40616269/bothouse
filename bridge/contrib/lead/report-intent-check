@@ -33,7 +33,7 @@ def call(system, prompt):
     """claude -p 小模型，无工具、不读设置；返回（结果文字, 花费美元）；出错返回（"", 0）。同 _recall.claude，时限放长。"""
     try:
         p = subprocess.run(
-            ["claude", "-p", "--model", MODEL, "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+            [*_recall._resolve_claude_cmd(MODEL), "-p", "--tools", "", "--setting-sources", "", "--strict-mcp-config",
              "--no-session-persistence", "--system-prompt", system, "--output-format", "json"],
             input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=tempfile.gettempdir())
         d = json.loads(p.stdout)

@@ -144,7 +144,14 @@ def judge(text):
     prompt = (f"## 用户原话\n{quotes}\n\n## 交接的总目标和范围（逐行检查这里）\n{judged}\n\n"
               f"## 派活人加的（原话没有，已写理由）\n{own or '（没有）'}{allowed}")
     try:
-        p = subprocess.run(["claude", "-p", "--model", MODEL, "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+        import shutil
+        _cli = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+        if _cli:
+            _cmd = [_cli, "--model", MODEL]
+        else:
+            _ducc = next((c for c in (shutil.which("ducc"), str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc")) if c and os.path.isfile(c) and os.access(c, os.X_OK)), None)
+            _cmd = [_ducc, "--permission-mode", "bypassPermissions", *(["--model", MODEL] if MODEL not in ("haiku", "sonnet", "opus") else [])] if _ducc else ["claude", "--model", MODEL]
+        p = subprocess.run([*_cmd, "-p", "--tools", "", "--setting-sources", "", "--strict-mcp-config",
                             "--no-session-persistence", "--system-prompt", SYSTEM, "--output-format", "json"],
                            input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=tempfile.gettempdir())
         d = json.loads(p.stdout)

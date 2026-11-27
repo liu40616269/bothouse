@@ -199,8 +199,15 @@ def judge(draft, user_msgs=(), kind="reply"):
               f"\n\n## 用户最近的话（旧→新）\n" + ("\n".join(f"- {m}" for m in user_msgs) or "（没有）") +
               f"\n\n## 草稿（{'要发给用户的回复' if kind == 'reply' else '要交给执行者的交接'}）\n{draft}")
     try:
+        import shutil
+        _cli = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+        if _cli:
+            _cmd = [_cli, "--model", MODEL]
+        else:
+            _ducc = next((c for c in (shutil.which("ducc"), str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc")) if c and os.path.isfile(c) and os.access(c, os.X_OK)), None)
+            _cmd = [_ducc, "--permission-mode", "bypassPermissions", *(["--model", MODEL] if MODEL not in ("haiku", "sonnet", "opus") else [])] if _ducc else ["claude", "--model", MODEL]
         p = subprocess.run(
-            ["claude", "-p", "--model", MODEL, "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+            [*_cmd, "-p", "--tools", "", "--setting-sources", "", "--strict-mcp-config",
              "--no-session-persistence", "--system-prompt", SYSTEM_HANDOFF if kind == "handoff" else SYSTEM_REPLY,
              "--output-format", "json"],
             input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=tempfile.gettempdir())

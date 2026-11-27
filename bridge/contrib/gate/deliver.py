@@ -293,7 +293,14 @@ def _ask_model(content):
     返回差别列表；没装 claude、超时、输出读不出都算没比成（Refused），不编差别。"""
     msg = {"type": "user", "message": {"role": "user", "content": content}}
     try:
-        p = subprocess.run(["claude", "-p", "--model", MODEL, "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+        import shutil
+        _cli = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+        if _cli:
+            _cmd = [_cli, "--model", MODEL]
+        else:
+            _ducc = next((c for c in (shutil.which("ducc"), str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc")) if c and os.path.isfile(c) and os.access(c, os.X_OK)), None)
+            _cmd = [_ducc, "--permission-mode", "bypassPermissions", *(["--model", MODEL] if MODEL not in ("haiku", "sonnet", "opus") else [])] if _ducc else ["claude", "--model", MODEL]
+        p = subprocess.run([*_cmd, "-p", "--tools", "", "--setting-sources", "", "--strict-mcp-config",
                             "--no-session-persistence", "--system-prompt", SYSTEM, "--input-format", "stream-json",
                             "--output-format", "stream-json", "--verbose"],
                            input=json.dumps(msg, ensure_ascii=False) + "\n", capture_output=True, text=True,

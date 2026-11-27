@@ -43,12 +43,24 @@ class Failed(Exception):
     """小模型没调成（超时、出错、退出码非 0、is_error、输出不是 JSON），str 是原因。"""
 
 
+def _resolve_claude_cmd(model=None):
+    import shutil
+    bin_path = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+    if bin_path:
+        return [bin_path, *(["--model", model] if model else [])]
+    for cand in (shutil.which("ducc"), str(Path.home() / ".comate" / "baidu-cc" / "bin" / "ducc")):
+        if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
+            use_model = model if (model and model not in ("haiku", "sonnet", "opus")) else None
+            return [cand, "--permission-mode", "bypassPermissions", *(["--model", use_model] if use_model else [])]
+    return ["claude", *(["--model", model] if model else [])]
+
+
 def claude_ex(system, prompt):
     """claude -p 小模型，无工具、不读设置；返回（结果文字, 花费美元, 出错原因）；调成了原因是 ""。同 ../hooks/intent_judge.py。
     退出码非 0、is_error、超时、输出不是 JSON 都算出错（#1492 P3：原先出错当「没搜到」写进交接）。"""
     try:
         p = subprocess.run(
-            ["claude", "-p", "--model", MODEL, "--tools", "", "--setting-sources", "", "--strict-mcp-config",
+            [*_resolve_claude_cmd(MODEL), "-p", "--tools", "", "--setting-sources", "", "--strict-mcp-config",
              "--no-session-persistence", "--system-prompt", system, "--output-format", "json"],
             input=prompt, capture_output=True, text=True, timeout=MODEL_TIMEOUT, cwd=tempfile.gettempdir())
     except subprocess.TimeoutExpired:
