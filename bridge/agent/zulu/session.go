@@ -436,6 +436,13 @@ func (s *zuluSession) CurrentModel() string {
 	return s.currentModel()
 }
 
+// GetModel satisfies core's session model reporter interface (replyFooterModel /
+// roleConversationModel / SetLastModel) so the homepage and role cards display
+// the live zulu model instead of a stale historical LastModel.
+func (s *zuluSession) GetModel() string {
+	return s.currentModel()
+}
+
 func (s *zuluSession) CurrentSessionID() string {
 	v, _ := s.sessionID.Load().(string)
 	return v
