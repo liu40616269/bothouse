@@ -8,6 +8,7 @@ export interface RelayHealthStatus {
   projects?: string[];
   checked_at?: string;
   since?: string;
+  webrelay_available?: boolean;
 }
 
 export interface RelayAuthSnapshot {
@@ -27,3 +28,4 @@ export const startRelayAuth = () => api.post<RelayAuthSnapshot>('/relay/auth/sta
 export const pollRelayAuth = () => api.get<RelayAuthSnapshot>('/relay/auth/poll');
 export const sendRelayAuthInput = (input: string) => api.post<RelayAuthSnapshot>('/relay/auth/input', { input });
 export const cancelRelayAuth = () => api.post<RelayAuthSnapshot>('/relay/auth/cancel');
+export const openWebRelayApp = () => api.post<{ launched: boolean; app: string }>('/relay/auth/webrelay');

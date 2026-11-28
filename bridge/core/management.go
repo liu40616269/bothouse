@@ -439,6 +439,7 @@ func (m *ManagementServer) buildHandler(mux *http.ServeMux) http.Handler {
 	mux.HandleFunc(prefix+"/relay/auth/poll", m.wrap(m.handleRelayAuthPoll))
 	mux.HandleFunc(prefix+"/relay/auth/input", m.wrap(m.handleRelayAuthInput))
 	mux.HandleFunc(prefix+"/relay/auth/cancel", m.wrap(m.handleRelayAuthCancel))
+	mux.HandleFunc(prefix+"/relay/auth/webrelay", m.wrap(m.handleRelayOpenWebRelay))
 	mux.HandleFunc(prefix+"/setup/gate", m.wrap(m.handleSetupGateSettings))
 	mux.HandleFunc(prefix+"/setup/gate/save", m.wrap(m.handleSetupGateSave))
 	mux.HandleFunc(prefix+"/setup/gate/start", m.wrap(m.handleSetupGateStart))

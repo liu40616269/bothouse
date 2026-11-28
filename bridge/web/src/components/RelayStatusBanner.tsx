@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, AlertTriangle, RefreshCw, ShieldAlert, Radio, KeyRound, ExternalLink, Send } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, RefreshCw, ShieldAlert, Radio, KeyRound, ExternalLink, Send, Fingerprint } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import {
   cancelRelayAuth,
   checkRelayNow,
   getRelayStatus,
+  openWebRelayApp,
   pollRelayAuth,
   sendRelayAuthInput,
   startRelayAuth,
@@ -23,6 +24,8 @@ function formatTime(iso?: string): string {
 export function RelayStatusBanner() {
   const [status, setStatus] = useState<RelayHealthStatus | null>(null);
   const [checking, setChecking] = useState(false);
+  const [waitingWebRelay, setWaitingWebRelay] = useState(false);
+  const webRelayPollRef = useRef<number | null>(null);
 
   const [authOpen, setAuthOpen] = useState(false);
   const [authSnap, setAuthSnap] = useState<RelayAuthSnapshot | null>(null);
@@ -85,6 +88,50 @@ export function RelayStatusBanner() {
     } finally {
       setChecking(false);
     }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (webRelayPollRef.current !== null) {
+        window.clearInterval(webRelayPollRef.current);
+      }
+    };
+  }, []);
+
+  const handleOpenWebRelay = async () => {
+    setWaitingWebRelay(true);
+    try {
+      await openWebRelayApp();
+    } catch {
+      setWaitingWebRelay(false);
+      return;
+    }
+    if (webRelayPollRef.current !== null) {
+      window.clearInterval(webRelayPollRef.current);
+    }
+    let attempts = 0;
+    webRelayPollRef.current = window.setInterval(async () => {
+      attempts += 1;
+      try {
+        const res = await checkRelayNow();
+        setStatus(res);
+        if (res.state === 'ok' || attempts >= 30) {
+          if (webRelayPollRef.current !== null) {
+            window.clearInterval(webRelayPollRef.current);
+            webRelayPollRef.current = null;
+          }
+          setWaitingWebRelay(false);
+        }
+      } catch {
+        if (attempts >= 30) {
+          if (webRelayPollRef.current !== null) {
+            window.clearInterval(webRelayPollRef.current);
+            webRelayPollRef.current = null;
+          }
+          setWaitingWebRelay(false);
+        }
+      }
+    }, 2000);
   };
 
   const handleStartAuth = async () => {
@@ -211,15 +258,27 @@ export function RelayStatusBanner() {
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {!isOK && status.webrelay_available && (
+            <Button
+              size="sm"
+              onClick={handleOpenWebRelay}
+              disabled={waitingWebRelay}
+              className="gap-1.5"
+            >
+              <Fingerprint size={14} />
+              {waitingWebRelay ? '等待指纹认证…' : 'WebRelay 指纹认证'}
+            </Button>
+          )}
           {!isOK && (
             <Button
+              variant={status.webrelay_available ? 'secondary' : 'primary'}
               size="sm"
               onClick={handleStartAuth}
               className="gap-1.5"
             >
               <KeyRound size={13} />
-              重新认证
+              {status.webrelay_available ? '密码认证' : '重新认证'}
             </Button>
           )}
           <Button

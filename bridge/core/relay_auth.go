@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -433,4 +435,39 @@ func (m *ManagementServer) handleRelayAuthCancel(w http.ResponseWriter, r *http.
 		return
 	}
 	mgmtJSON(w, http.StatusOK, mon.CancelAuth())
+}
+
+func webRelayAppPath() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	candidates := []string{"/Applications/WebRelay.app"}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidates = append(candidates, filepath.Join(home, "Applications", "WebRelay.app"))
+	}
+	for _, p := range candidates {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func (m *ManagementServer) handleRelayOpenWebRelay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		mgmtError(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	appPath := webRelayAppPath()
+	if appPath == "" {
+		mgmtError(w, http.StatusNotFound, "未检测到本机安装 WebRelay.app")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "open", "-a", appPath).Run(); err != nil {
+		mgmtError(w, http.StatusInternalServerError, "唤起 WebRelay 失败: "+err.Error())
+		return
+	}
+	mgmtJSON(w, http.StatusOK, map[string]any{"launched": true, "app": appPath})
 }

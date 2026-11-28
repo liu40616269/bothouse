@@ -21,13 +21,14 @@ const (
 
 // RelayHealthStatus describes the latest SSH/relay connectivity state for team_remote.
 type RelayHealthStatus struct {
-	Enabled   bool     `json:"enabled"`
-	Target    string   `json:"target,omitempty"`
-	State     string   `json:"state"` // disabled | unknown | ok | auth_expired | unreachable
-	Message   string   `json:"message,omitempty"`
-	Projects  []string `json:"projects,omitempty"`
-	CheckedAt string   `json:"checked_at,omitempty"`
-	Since     string   `json:"since,omitempty"`
+	Enabled           bool     `json:"enabled"`
+	Target            string   `json:"target,omitempty"`
+	State             string   `json:"state"` // disabled | unknown | ok | auth_expired | unreachable
+	Message           string   `json:"message,omitempty"`
+	Projects          []string `json:"projects,omitempty"`
+	CheckedAt         string   `json:"checked_at,omitempty"`
+	Since             string   `json:"since,omitempty"`
+	WebRelayAvailable bool     `json:"webrelay_available,omitempty"`
 }
 
 // RelayProbeFunc probes SSH/relay reachability for a TeamRemoteState and returns (state, message).
@@ -140,13 +141,14 @@ func (m *RelayHealthMonitor) CheckNow(ctx context.Context) RelayHealthStatus {
 		since = nowStr
 	}
 	m.status = RelayHealthStatus{
-		Enabled:   true,
-		Target:    target,
-		State:     state,
-		Message:   msg,
-		Projects:  append([]string(nil), tr.Projects...),
-		CheckedAt: nowStr,
-		Since:     since,
+		Enabled:           true,
+		Target:            target,
+		State:             state,
+		Message:           msg,
+		Projects:          append([]string(nil), tr.Projects...),
+		CheckedAt:         nowStr,
+		Since:             since,
+		WebRelayAvailable: webRelayAppPath() != "",
 	}
 
 	rolesLabel := strings.Join(tr.Projects, " / ")
