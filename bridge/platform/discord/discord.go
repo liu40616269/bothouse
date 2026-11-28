@@ -21,7 +21,6 @@ import (
 	"github.com/chenhg5/cc-connect/core"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/gorilla/websocket"
 )
 
 func init() {
@@ -763,12 +762,20 @@ func (p *Platform) buildSession() (*discordgo.Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("discord: create session: %w", err)
 	}
-	var base http.RoundTripper = http.DefaultTransport
+	proxyFn := systemProxyFunc
 	if p.proxyURL != nil {
-		base = &http.Transport{Proxy: http.ProxyURL(p.proxyURL)}
-		session.Dialer = &websocket.Dialer{Proxy: http.ProxyURL(p.proxyURL)}
+		proxyFn = http.ProxyURL(p.proxyURL)
 		slog.Info("discord: using proxy", "proxy", p.proxyURL.Host)
 	}
+	base := &http.Transport{
+		Proxy:                 proxyFn,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	session.Dialer = newWebSocketDialer(proxyFn)
 	session.Client = &http.Client{Transport: &silentTransport{base: base, isSilent: p.isSilentChannel, mentionUsers: p.workspaceMentionUsers}, Timeout: 60 * time.Second}
 
 	session.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages | discordgo.IntentMessageContent
