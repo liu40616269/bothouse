@@ -18,6 +18,7 @@ import { Button, EmptyState, Modal, Badge, RoleAvatar, StatePill, roleState, ROL
 import { cn } from '@/lib/utils';
 import { listRoles, restartRole, setRolePaused, type RoleInfo } from '@/api/roles';
 import { DSHNotice } from '@/components/DSHNotice';
+import { RelayStatusBanner } from '@/components/RelayStatusBanner';
 import { backendLabel } from '@/lib/roleIdentity';
 import { dshMemberId, dshOnlyRows } from '@/lib/dshMerge';
 import { shownName } from '@/api/projects';
@@ -174,6 +175,8 @@ export default function RoleList() {
           </Button>
         </div>
       </header>
+
+      <RelayStatusBanner />
 
       {roles.length > 0 && (
         // 这一屏的「一个发现」：谁在忙、谁掉线，做成可点的筛选，而不是埋在标题下的一行小字。

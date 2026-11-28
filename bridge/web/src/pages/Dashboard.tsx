@@ -20,6 +20,7 @@ import { dshOnlyRows } from '@/lib/dshMerge';
 import api from '@/api/client';
 import { formatUptime, formatTime } from '@/lib/utils';
 import { usePageRefresh } from '@/lib/usePageRefresh';
+import { RelayStatusBanner } from '@/components/RelayStatusBanner';
 
 const MAX_ITEMS = 4;
 
@@ -187,6 +188,8 @@ export default function Dashboard() {
           {metric(t('dashboard.busyNow', '在忙'), tally.busy)}
         </div>
       </section>
+
+      <RelayStatusBanner />
 
       {loading && !status ? (
         <LoadingState label={t('common.loading')} />
