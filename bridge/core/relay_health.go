@@ -48,6 +48,7 @@ type RelayHealthMonitor struct {
 	mu        sync.Mutex
 	status    RelayHealthStatus
 	alerted   bool // true while a failure alert is active (cleared on recovery)
+	authSess  *relayAuthSession
 	stopCh    chan struct{}
 	doneCh    chan struct{}
 	startOnce sync.Once
