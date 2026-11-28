@@ -921,6 +921,38 @@ func runMain() {
 
 	gateSup := startGate(cfg)
 
+	relayMon := core.NewRelayHealthMonitor(
+		func() core.TeamRemoteState {
+			c, err := config.Load(config.ConfigPath)
+			if err != nil {
+				return core.TeamRemoteState{
+					Enabled:    cfg.TeamRemote.Enabled,
+					RemoteHost: cfg.TeamRemote.RemoteHost,
+					RelayHost:  cfg.TeamRemote.RelayHost,
+					WorkDir:    cfg.TeamRemote.WorkDir,
+					SSHArgs:    cfg.TeamRemote.SSHArgs,
+					Projects:   cfg.TeamRemote.Projects,
+				}
+			}
+			return core.TeamRemoteState{
+				Enabled:    c.TeamRemote.Enabled,
+				RemoteHost: c.TeamRemote.RemoteHost,
+				RelayHost:  c.TeamRemote.RelayHost,
+				WorkDir:    c.TeamRemote.WorkDir,
+				SSHArgs:    c.TeamRemote.SSHArgs,
+				Projects:   c.TeamRemote.Projects,
+			}
+		},
+		func(title, body string) {
+			core.SendRelayAlertToEngines(engines, title, body)
+		},
+	)
+	if mgmtSrv != nil {
+		mgmtSrv.SetRelayHealthMonitor(relayMon)
+	}
+	relayMon.Start()
+	defer relayMon.Stop()
+
 	slog.Info("bothouse is running", "projects", len(engines))
 	rt.setReady(true)
 

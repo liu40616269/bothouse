@@ -64,6 +64,7 @@ type ManagementServer struct {
 	timerScheduler     *TimerScheduler
 	heartbeatScheduler *HeartbeatScheduler
 	bridgeServer       *BridgeServer
+	relayHealth        *RelayHealthMonitor
 	imageGen           *ImageGenerator // opt-in 生图 (#150 item c); nil when [image_gen] is off
 	dshProxyOnce       sync.Once
 	dshProxy           *dshProxy // /dsh/ channels-page proxy (management_dsh_proxy.go)
@@ -432,6 +433,8 @@ func (m *ManagementServer) buildHandler(mux *http.ServeMux) http.Handler {
 	// 闸门设置页 (#217): 装好以后也能改谁在什么时候接话，以及闸门模型 API（jev）
 	mux.HandleFunc(prefix+"/forum", m.wrap(m.handleForum))
 	mux.HandleFunc(prefix+"/forum/settings", m.wrap(m.handleForumSettings))
+	mux.HandleFunc(prefix+"/relay/status", m.wrap(m.handleRelayHealthStatus))
+	mux.HandleFunc(prefix+"/relay/check", m.wrap(m.handleRelayHealthCheck))
 	mux.HandleFunc(prefix+"/setup/gate", m.wrap(m.handleSetupGateSettings))
 	mux.HandleFunc(prefix+"/setup/gate/save", m.wrap(m.handleSetupGateSave))
 	mux.HandleFunc(prefix+"/setup/gate/start", m.wrap(m.handleSetupGateStart))
